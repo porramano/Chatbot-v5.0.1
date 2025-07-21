@@ -38,10 +38,13 @@ app.use(express.static(__dirname));
 const dataCache = new Map();
 const CACHE_TTL = 3600000; // 1 hora
 
-// Função REFINADA para extrair dados da página usando Cheerio + Axios
+// Cache para conversas do chatbot
+const conversationCache = new Map();
+
+// Função SUPER REFINADA para extrair dados da página
 async function extractPageData(url) {
   try {
-    logger.info(`Iniciando extração REFINADA de dados para: ${url}`);
+    logger.info(`Iniciando extração SUPER REFINADA de dados para: ${url}`);
     
     // Verificar cache
     const cacheKey = url;
@@ -89,15 +92,16 @@ async function extractPageData(url) {
       if (response.status === 200) {
         const $ = cheerio.load(response.data);
         
-        // REFINAMENTO: Extrair título com prioridade para conteúdo real
+        // SUPER REFINAMENTO: Extrair título com múltiplas estratégias
         let title = '';
         const titleSelectors = [
-          'h1:not(:contains("Vendd")):not(:contains("Página"))',
+          'h1:not(:contains("Vendd")):not(:contains("Página")):not(:contains("Error")):not(:contains("404"))',
+          '.main-title:not(:contains("Vendd"))',
+          '.product-title:not(:contains("Vendd"))',
+          '.headline:not(:contains("Vendd"))',
           '.title:not(:contains("Vendd"))',
-          '.product-title',
-          '.headline',
-          '[class*="title"]:not(:contains("Vendd"))',
-          '[class*="headline"]',
+          '[class*="title"]:not(:contains("Vendd")):not(:contains("Error"))',
+          '[class*="headline"]:not(:contains("Vendd"))',
           'meta[property="og:title"]',
           'meta[name="twitter:title"]',
           'title'
@@ -107,7 +111,11 @@ async function extractPageData(url) {
           const element = $(selector).first();
           if (element.length) {
             title = element.attr('content') || element.text();
-            if (title && title.trim().length > 5 && !title.toLowerCase().includes('vendd') && !title.toLowerCase().includes('página')) {
+            if (title && title.trim().length > 10 && 
+                !title.toLowerCase().includes('vendd') && 
+                !title.toLowerCase().includes('página') &&
+                !title.toLowerCase().includes('error') &&
+                !title.toLowerCase().includes('404')) {
               extractedData.title = title.trim();
               logger.info(`Título extraído: ${title.trim()}`);
               break;
@@ -115,7 +123,7 @@ async function extractPageData(url) {
           }
         }
 
-        // REFINAMENTO: Extrair descrição mais específica e detalhada
+        // SUPER REFINAMENTO: Extrair descrição mais específica e detalhada
         let description = '';
         const descSelectors = [
           // Primeiro, procurar por descrições específicas do produto
@@ -124,37 +132,48 @@ async function extractPageData(url) {
           '.summary p:first-child',
           '.lead p:first-child',
           '.intro p:first-child',
-          // Depois meta tags
+          '.content p:first-child',
+          '.main-content p:first-child',
+          // Procurar por parágrafos com palavras-chave específicas
+          'p:contains("Arsenal"):first',
+          'p:contains("Secreto"):first',
+          'p:contains("CEO"):first',
+          'p:contains("Afiliado"):first',
+          'p:contains("Transforme"):first',
+          'p:contains("Descubra"):first',
+          'p:contains("Vendas"):first',
+          'p:contains("Marketing"):first',
+          'p:contains("Estratégia"):first',
+          'p:contains("Resultado"):first',
+          // Meta tags
           'meta[name="description"]',
           'meta[property="og:description"]',
           'meta[name="twitter:description"]',
           // Por último, parágrafos gerais (mas filtrados)
-          'p:contains("Descubra"):first',
-          'p:contains("Transforme"):first',
-          'p:contains("Arsenal"):first',
-          'p:contains("CEO"):first',
-          'p:contains("Afiliado"):first',
-          'p:contains("Vendas"):first',
-          'p:contains("Marketing"):first',
-          'p:not(:contains("cookie")):not(:contains("política")):not(:contains("termos")):first'
+          'p:not(:contains("cookie")):not(:contains("política")):not(:contains("termos")):not(:contains("vendd")):not(:empty)',
+          '.text-content p:first',
+          'article p:first',
+          'main p:first'
         ];
         
         for (const selector of descSelectors) {
           const element = $(selector).first();
           if (element.length) {
             description = element.attr('content') || element.text();
-            if (description && description.trim().length > 50 && 
+            if (description && description.trim().length > 80 && 
                 !description.toLowerCase().includes('cookie') && 
                 !description.toLowerCase().includes('política') &&
-                !description.toLowerCase().includes('vendd')) {
-              extractedData.description = description.trim().substring(0, 400);
+                !description.toLowerCase().includes('termos') &&
+                !description.toLowerCase().includes('vendd') &&
+                !description.toLowerCase().includes('error')) {
+              extractedData.description = description.trim().substring(0, 500);
               logger.info(`Descrição extraída: ${description.trim().substring(0, 100)}...`);
               break;
             }
           }
         }
 
-        // REFINAMENTO: Extrair preço com busca mais específica
+        // SUPER REFINAMENTO: Extrair preço com busca mais específica e inteligente
         let price = '';
         const priceSelectors = [
           // Seletores específicos para preços
@@ -167,23 +186,23 @@ async function extractPageData(url) {
           '.price',
           '.valor',
           '.preco',
-          // Busca por texto que contenha valores monetários
-          '*:contains("R$"):not(script):not(style)',
-          '*:contains("USD"):not(script):not(style)',
-          '*:contains("$"):not(script):not(style)',
+          '.money',
+          '.currency',
           // Classes que podem conter preços
           '[class*="price"]',
           '[class*="valor"]',
           '[class*="preco"]',
           '[class*="money"]',
-          '[class*="cost"]'
+          '[class*="cost"]',
+          '[class*="amount"]'
         ];
         
+        // Primeiro, procurar em elementos específicos
         for (const selector of priceSelectors) {
           $(selector).each((i, element) => {
             const text = $(element).text().trim();
-            // Regex mais específica para encontrar preços
-            const priceMatch = text.match(/R\$\s*\d+[.,]?\d*|USD\s*\d+[.,]?\d*|\$\s*\d+[.,]?\d*|€\s*\d+[.,]?\d*|£\s*\d+[.,]?\d*/);
+            // Regex mais específica para encontrar preços brasileiros
+            const priceMatch = text.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?|USD\s*\d+[.,]?\d*|\$\s*\d+[.,]?\d*|€\s*\d+[.,]?\d*|£\s*\d+[.,]?\d*/);
             if (priceMatch && !price) {
               price = priceMatch[0];
               logger.info(`Preço extraído: ${price}`);
@@ -193,20 +212,39 @@ async function extractPageData(url) {
           if (price) break;
         }
         
-        // Se não encontrou preço específico, procurar por ofertas ou promoções
+        // Se não encontrou preço específico, procurar no texto geral
+        if (!price) {
+          const bodyText = $('body').text();
+          const priceMatches = bodyText.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?/g);
+          if (priceMatches && priceMatches.length > 0) {
+            // Pegar o primeiro preço que pareça ser um valor de produto (não muito baixo)
+            for (const match of priceMatches) {
+              const numericValue = parseFloat(match.replace(/R\$\s*/, '').replace(/[.,]/g, ''));
+              if (numericValue > 50) { // Assumir que produtos custam mais que R$ 50
+                price = match;
+                logger.info(`Preço extraído do texto geral: ${price}`);
+                break;
+              }
+            }
+          }
+        }
+        
+        // Se ainda não encontrou preço, procurar por ofertas ou promoções
         if (!price) {
           const offerSelectors = [
             '*:contains("oferta"):not(script):not(style)',
             '*:contains("promoção"):not(script):not(style)',
             '*:contains("desconto"):not(script):not(style)',
             '*:contains("por apenas"):not(script):not(style)',
-            '*:contains("investimento"):not(script):not(style)'
+            '*:contains("investimento"):not(script):not(style)',
+            '*:contains("valor"):not(script):not(style)'
           ];
           
           for (const selector of offerSelectors) {
             $(selector).each((i, element) => {
               const text = $(element).text().trim();
-              if (text.length > 10 && text.length < 200 && !price) {
+              if (text.length > 20 && text.length < 300 && !price &&
+                  (text.includes('R$') || text.includes('apenas') || text.includes('investimento'))) {
                 price = text;
                 logger.info(`Oferta extraída: ${price}`);
                 return false;
@@ -220,16 +258,18 @@ async function extractPageData(url) {
           extractedData.price = price;
         }
 
-        // REFINAMENTO: Extrair benefícios mais específicos
+        // SUPER REFINAMENTO: Extrair benefícios mais específicos e relevantes
         const benefits = [];
         const benefitSelectors = [
           '.benefits li',
           '.vantagens li',
           '.features li',
           '.product-benefits li',
+          '.advantages li',
           'ul li:contains("✓")',
           'ul li:contains("✅")',
           'ul li:contains("•")',
+          'ul li:contains("→")',
           'li:contains("Transforme")',
           'li:contains("Alcance")',
           'li:contains("Domine")',
@@ -237,21 +277,28 @@ async function extractPageData(url) {
           'li:contains("Fechar")',
           'li:contains("Resultados")',
           'li:contains("Garantia")',
-          'ul li'
+          'li:contains("Estratégia")',
+          'li:contains("Técnica")',
+          'li:contains("Método")',
+          'li:contains("Sistema")',
+          'ul li',
+          'ol li'
         ];
         
         for (const selector of benefitSelectors) {
           $(selector).each((i, el) => {
             const text = $(el).text().trim();
-            if (text && text.length > 15 && text.length < 200 && benefits.length < 5 &&
+            if (text && text.length > 20 && text.length < 300 && benefits.length < 5 &&
                 !text.toLowerCase().includes('cookie') &&
                 !text.toLowerCase().includes('política') &&
                 !text.toLowerCase().includes('termos') &&
-                !text.toLowerCase().includes('vendd')) {
+                !text.toLowerCase().includes('vendd') &&
+                !text.toLowerCase().includes('error') &&
+                !benefits.includes(text)) {
               benefits.push(text);
             }
           });
-          if (benefits.length >= 3) break;
+          if (benefits.length >= 5) break;
         }
         
         if (benefits.length > 0) {
@@ -259,50 +306,62 @@ async function extractPageData(url) {
           logger.info(`Benefícios extraídos: ${benefits.length}`);
         }
 
-        // REFINAMENTO: Extrair depoimentos mais específicos
+        // SUPER REFINAMENTO: Extrair depoimentos mais específicos
         const testimonials = [];
         const testimonialSelectors = [
           '.testimonials li',
           '.depoimentos li',
+          '.reviews li',
           '.review',
           '.testimonial-text',
           '.depoimento',
+          '.feedback',
           '*:contains("recomendo"):not(script):not(style)',
           '*:contains("excelente"):not(script):not(style)',
           '*:contains("funcionou"):not(script):not(style)',
-          '*:contains("resultado"):not(script):not(style)'
+          '*:contains("resultado"):not(script):not(style)',
+          '*:contains("incrível"):not(script):not(style)',
+          '*:contains("mudou minha vida"):not(script):not(style)'
         ];
         
         for (const selector of testimonialSelectors) {
           $(selector).each((i, el) => {
             const text = $(el).text().trim();
-            if (text && text.length > 30 && text.length < 300 && testimonials.length < 3 &&
+            if (text && text.length > 30 && text.length < 400 && testimonials.length < 3 &&
                 !text.toLowerCase().includes('cookie') &&
-                !text.toLowerCase().includes('política')) {
+                !text.toLowerCase().includes('política') &&
+                !text.toLowerCase().includes('vendd') &&
+                !testimonials.includes(text)) {
               testimonials.push(text);
             }
           });
-          if (testimonials.length >= 2) break;
+          if (testimonials.length >= 3) break;
         }
         
         if (testimonials.length > 0) {
           extractedData.testimonials = testimonials;
         }
 
-        // REFINAMENTO: Extrair CTA mais específico
+        // SUPER REFINAMENTO: Extrair CTA mais específico
         let cta = '';
         const ctaSelectors = [
           'a.button:contains("QUERO")',
           'button.cta:contains("QUERO")',
-          '.buy-button',
-          '.call-to-action',
+          'a:contains("ARSENAL")',
           'button:contains("ARSENAL")',
+          'a:contains("AGORA")',
           'button:contains("AGORA")',
           'a:contains("COMPRAR")',
+          'button:contains("COMPRAR")',
           'a:contains("ADQUIRIR")',
+          'button:contains("ADQUIRIR")',
+          '.buy-button',
+          '.call-to-action',
           '[class*="buy"]',
           '[class*="cta"]',
-          '.btn-primary'
+          '.btn-primary',
+          '.btn-success',
+          '.button-primary'
         ];
         
         for (const selector of ctaSelectors) {
@@ -317,7 +376,7 @@ async function extractPageData(url) {
           }
         }
 
-        logger.info('Extração REFINADA concluída com sucesso via Cheerio');
+        logger.info('Extração SUPER REFINADA concluída com sucesso via Cheerio');
 
       } else {
         logger.warn(`Status HTTP não OK: ${response.status}`);
@@ -364,7 +423,7 @@ async function extractPageData(url) {
       timestamp: Date.now()
     });
 
-    logger.info('Dados REFINADOS extraídos:', extractedData);
+    logger.info('Dados SUPER REFINADOS extraídos:', extractedData);
     return extractedData;
 
   } catch (error) {
@@ -389,34 +448,95 @@ async function extractPageData(url) {
   }
 }
 
-// Função REFINADA para gerar resposta da IA
-async function generateAIResponse(userMessage, pageData) {
+// Função SUPER INTELIGENTE para gerar resposta da IA
+async function generateAIResponse(userMessage, pageData, conversationId = 'default') {
   try {
+    // Recuperar histórico da conversa
+    let conversation = conversationCache.get(conversationId) || [];
+    
+    // Adicionar mensagem do usuário ao histórico
+    conversation.push({ role: 'user', message: userMessage, timestamp: Date.now() });
+    
+    // Manter apenas as últimas 10 mensagens para não sobrecarregar
+    if (conversation.length > 10) {
+      conversation = conversation.slice(-10);
+    }
+    
+    // Salvar histórico atualizado
+    conversationCache.set(conversationId, conversation);
+
     if (!process.env.OPENROUTER_API_KEY) {
-      // REFINAMENTO: Resposta mais específica e persuasiva baseada nos dados reais
-      const responses = {
-        'preço': `💰 Sobre o investimento no "${pageData.title}": ${pageData.price}. É um investimento que se paga rapidamente com os resultados que você vai alcançar! ${pageData.cta}`,
-        'benefícios': `✅ Os principais benefícios do "${pageData.title}" são:\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n${pageData.cta}`,
-        'como funciona': `🔥 O "${pageData.title}" funciona assim: ${pageData.description}\n\nPrincipais resultados:\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n${pageData.cta}`,
-        'garantia': `🛡️ Sim! O "${pageData.title}" oferece garantia total. ${pageData.description} Você não tem nada a perder e tudo a ganhar! ${pageData.cta}`,
-        'depoimentos': pageData.testimonials.length > 0 ? 
-          `💬 Veja o que nossos clientes dizem sobre "${pageData.title}":\n\n${pageData.testimonials.map(t => `"${t}"`).join('\n\n')}\n\n${pageData.cta}` :
-          `💬 O "${pageData.title}" já transformou a vida de milhares de pessoas! ${pageData.description} ${pageData.cta}`
-      };
-      
-      // Detectar intenção da mensagem
+      // SUPER INTELIGÊNCIA: Sistema de respostas contextuais e específicas
       const message = userMessage.toLowerCase();
-      for (const [key, response] of Object.entries(responses)) {
-        if (message.includes(key)) {
-          return response;
+      
+      // Detectar intenção específica da mensagem
+      let response = '';
+      
+      if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
+        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\nÉ um investimento que se paga rapidamente com os resultados que você vai alcançar! Muitos clientes recuperam o valor em poucos dias.\n\n🎯 ${pageData.cta}`;
+        
+      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('o que ganho')) {
+        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n🚀 ${pageData.cta}`;
+        
+      } else if (message.includes('como funciona') || message.includes('funciona') || message.includes('método')) {
+        response = `🔥 **Como o "${pageData.title}" funciona:**\n\n${pageData.description}\n\n**Principais resultados que você vai alcançar:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n💪 ${pageData.cta}`;
+        
+      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco')) {
+        response = `🛡️ **Sim! O "${pageData.title}" oferece garantia total.**\n\n${pageData.description}\n\nVocê não tem nada a perder e tudo a ganhar! Se não ficar satisfeito, devolvemos seu dinheiro.\n\n✅ ${pageData.cta}`;
+        
+      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo') || message.includes('resultado')) {
+        if (pageData.testimonials.length > 0) {
+          // Remover duplicatas dos depoimentos
+          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
+          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n🎯 ${pageData.cta}`;
+        } else {
+          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\nOs resultados falam por si só!\n\n🚀 ${pageData.cta}`;
         }
+        
+      } else if (message.includes('bônus') || message.includes('extra') || message.includes('brinde')) {
+        response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
+        
+      } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero')) {
+        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nClique no botão acima para garantir sua vaga!`;
+        
+      } else if (message.includes('dúvida') || message.includes('pergunta') || message.includes('ajuda')) {
+        response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n\nO que você gostaria de saber?`;
+        
+      } else {
+        // Resposta padrão mais inteligente e persuasiva
+        response = `Olá! 👋 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias ou depoimentos!`;
       }
       
-      // Resposta padrão mais persuasiva
-      return `Olá! 👋 Sobre o "${pageData.title}": ${pageData.description}\n\n💰 Investimento: ${pageData.price}\n\n✅ Principais benefícios:\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n${pageData.cta}\n\nComo posso te ajudar mais? Posso falar sobre preços, benefícios, garantias ou depoimentos!`;
+      // Adicionar resposta ao histórico
+      conversation.push({ role: 'assistant', message: response, timestamp: Date.now() });
+      conversationCache.set(conversationId, conversation);
+      
+      return response;
     }
 
-    const prompt = `Você é um assistente de vendas especializado e altamente persuasivo para o produto "${pageData.title}".\n\nInformações REAIS do produto:\n- Título: ${pageData.title}\n- Descrição: ${pageData.description}\n- Preço: ${pageData.price}\n- Benefícios: ${pageData.benefits.join(', ')}\n- Call to Action: ${pageData.cta}\n\nPergunta do cliente: ${userMessage}\n\nResponda de forma amigável, persuasiva e focada em vendas. Use APENAS as informações reais do produto. Seja específico e convincente.`;
+    // Se tiver API key, usar IA externa
+    const conversationHistory = conversation.map(c => ({
+      role: c.role === 'user' ? 'user' : 'assistant',
+      content: c.message
+    }));
+
+    const prompt = `Você é um assistente de vendas especializado e altamente persuasivo para o produto "${pageData.title}".
+
+INFORMAÇÕES REAIS DO PRODUTO:
+- Título: ${pageData.title}
+- Descrição: ${pageData.description}
+- Preço: ${pageData.price}
+- Benefícios: ${pageData.benefits.join(', ')}
+- Call to Action: ${pageData.cta}
+
+INSTRUÇÕES:
+- Use APENAS as informações reais do produto fornecidas
+- Seja específico, persuasivo e focado em vendas
+- Responda de forma amigável e profissional
+- Conduza naturalmente para a compra
+- Use emojis para tornar a conversa mais envolvente
+
+Pergunta do cliente: ${userMessage}`;
 
     const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
       model: 'microsoft/wizardlm-2-8x22b',
@@ -425,6 +545,7 @@ async function generateAIResponse(userMessage, pageData) {
           role: 'system',
           content: 'Você é um assistente de vendas especializado, amigável e altamente persuasivo. Use apenas informações reais do produto fornecidas.'
         },
+        ...conversationHistory.slice(-5), // Últimas 5 mensagens para contexto
         {
           role: 'user',
           content: prompt
@@ -442,7 +563,13 @@ async function generateAIResponse(userMessage, pageData) {
     });
 
     if (response.status === 200) {
-      return response.data.choices[0].message.content;
+      const aiResponse = response.data.choices[0].message.content;
+      
+      // Adicionar resposta da IA ao histórico
+      conversation.push({ role: 'assistant', message: aiResponse, timestamp: Date.now() });
+      conversationCache.set(conversationId, conversation);
+      
+      return aiResponse;
     } else {
       throw new Error('Erro na API do OpenRouter');
     }
@@ -450,15 +577,15 @@ async function generateAIResponse(userMessage, pageData) {
   } catch (error) {
     logger.error('Erro na geração de resposta IA:', error);
     
-    // REFINAMENTO: Fallback mais específico e persuasivo
-    const fallbackResponse = `Olá! 🔥 Sobre o "${pageData.title}":\n\n${pageData.description}\n\n💰 Investimento: ${pageData.price}\n\n✅ Principais benefícios:\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 Depoimentos: ${pageData.testimonials.join(' | ')}\n\n🚀 ${pageData.cta}\n\nComo posso te ajudar mais? Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
+    // SUPER FALLBACK: Resposta específica e persuasiva
+    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials.slice(0,2).join(' | ')}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
 
     return fallbackResponse;
   }
 }
 
-// Função para gerar HTML do chatbot (mantida igual)
-function generateChatbotHTML(pageData, robotName) {
+// Função para gerar HTML do chatbot (melhorada)
+function generateChatbotHTML(pageData, robotName, customInstructions = '') {
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -522,6 +649,7 @@ function generateChatbotHTML(pageData, robotName) {
             font-weight: bold;
             color: #333;
             margin-bottom: 5px;
+            font-size: 0.95rem;
         }
         
         .product-price {
@@ -557,6 +685,7 @@ function generateChatbotHTML(pageData, robotName) {
             border-radius: 18px;
             word-wrap: break-word;
             white-space: pre-line;
+            line-height: 1.4;
         }
         
         .message.user .message-content {
@@ -646,6 +775,7 @@ function generateChatbotHTML(pageData, robotName) {
                     • Benefícios e características
                     • Depoimentos de clientes
                     • Processo de compra
+                    ${customInstructions ? '\n\n' + customInstructions : ''}
                 </div>
             </div>
         </div>
@@ -665,6 +795,7 @@ function generateChatbotHTML(pageData, robotName) {
     <script>
         const pageData = ${JSON.stringify(pageData)};
         const robotName = "${robotName}";
+        const conversationId = 'chat_' + Date.now();
         
         function addMessage(content, isUser = false) {
             const messagesContainer = document.getElementById('chatMessages');
@@ -708,7 +839,8 @@ function generateChatbotHTML(pageData, robotName) {
                     body: JSON.stringify({
                         message: message,
                         pageData: pageData,
-                        robotName: robotName
+                        robotName: robotName,
+                        conversationId: conversationId
                     })
                 });
                 
@@ -736,7 +868,7 @@ function generateChatbotHTML(pageData, robotName) {
 </html>`;
 }
 
-// Rotas da API (mantidas iguais, mas usando a função refinada)
+// Rotas da API
 
 // CORREÇÃO: Rota /extract (não /api/extract)
 app.get('/extract', async (req, res) => {
@@ -750,7 +882,7 @@ app.get('/extract', async (req, res) => {
       });
     }
 
-    logger.info(`Solicitação de extração REFINADA para: ${url}`);
+    logger.info(`Solicitação de extração SUPER REFINADA para: ${url}`);
     const data = await extractPageData(url);
     
     res.json(data); // Retorna diretamente os dados, não wrapped em success/data
@@ -796,7 +928,7 @@ app.get('/api/extract', async (req, res) => {
 // Rota para o chatbot
 app.get('/chatbot', async (req, res) => {
   try {
-    const { url, robot } = req.query;
+    const { url, robot, instructions } = req.query;
     
     if (!url || !robot) {
       return res.status(400).send('URL e nome do robô são obrigatórios');
@@ -805,7 +937,7 @@ app.get('/chatbot', async (req, res) => {
     logger.info(`Gerando chatbot para: ${url} com robô: ${robot}`);
     
     const pageData = await extractPageData(url);
-    const html = generateChatbotHTML(pageData, robot);
+    const html = generateChatbotHTML(pageData, robot, instructions);
     
     res.send(html);
     
@@ -815,10 +947,10 @@ app.get('/chatbot', async (req, res) => {
   }
 });
 
-// Rota para chat da IA
+// Rota para chat da IA (melhorada)
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, pageData, robotName } = req.body;
+    const { message, pageData, robotName, conversationId } = req.body;
     
     if (!message || !pageData) {
       return res.status(400).json({ 
@@ -829,7 +961,7 @@ app.post('/api/chat', async (req, res) => {
 
     logger.info(`Chat: ${robotName} - ${message}`);
     
-    const response = await generateAIResponse(message, pageData);
+    const response = await generateAIResponse(message, pageData, conversationId);
     
     res.json({ 
       success: true, 
@@ -851,7 +983,7 @@ app.get('/test-extraction', async (req, res) => {
     const { url } = req.query;
     const testUrl = url || 'https://www.arsenalsecretodosceos.com.br/Nutrileads';
     
-    logger.info(`Teste de extração REFINADA para: ${testUrl}`);
+    logger.info(`Teste de extração SUPER REFINADA para: ${testUrl}`);
     const data = await extractPageData(testUrl);
     
     res.json({
@@ -876,7 +1008,7 @@ app.get('/health', (req, res) => {
     status: 'OK', 
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    version: '5.0.1-REFINED'
+    version: '5.0.1-SUPER-CORRIGIDO'
   });
 });
 
@@ -897,10 +1029,11 @@ app.use((error, req, res, next) => {
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
   logger.info(`Servidor rodando na porta ${PORT}`);
-  console.log(`🚀 LinkMágico Chatbot v5.0.1-REFINED rodando na porta ${PORT}`);
-  console.log(`📊 Extração REFINADA com Cheerio + Axios`);
-  console.log(`🎯 Descrição e Preço mais precisos`);
-  console.log(`🤖 IA mais persuasiva e específica`);
+  console.log(`🚀 LinkMágico Chatbot v5.0.1-SUPER-CORRIGIDO rodando na porta ${PORT}`);
+  console.log(`📊 Extração SUPER REFINADA com Cheerio + Axios`);
+  console.log(`🎯 Descrição e Preço muito mais precisos`);
+  console.log(`🤖 IA SUPER INTELIGENTE com respostas contextuais`);
+  console.log(`💬 Sistema de conversação com histórico`);
   console.log(`🔗 Acesse: http://localhost:${PORT}`);
 });
 
