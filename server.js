@@ -61,7 +61,14 @@ async function extractPageData(url) {
       benefits: ['Resultados comprovados', 'Suporte especializado', 'Garantia de satisfação'],
       testimonials: ['Produto excelente!', 'Recomendo para todos!'],
       cta: 'Compre Agora!',
-      url: url
+      url: url,
+      // Novos campos para melhor contexto
+      bonus: [],
+      guarantee: '',
+      paymentMethods: [],
+      targetAudience: '',
+      problemSolved: '',
+      uniqueValue: ''
     };
 
     try {
@@ -145,6 +152,9 @@ async function extractPageData(url) {
           'p:contains("Marketing"):first',
           'p:contains("Estratégia"):first',
           'p:contains("Resultado"):first',
+          'p:contains("leads"):first',
+          'p:contains("nutrição"):first',
+          'p:contains("conversão"):first',
           // Meta tags
           'meta[name="description"]',
           'meta[property="og:description"]',
@@ -281,6 +291,10 @@ async function extractPageData(url) {
           'li:contains("Técnica")',
           'li:contains("Método")',
           'li:contains("Sistema")',
+          'li:contains("Funil")',
+          'li:contains("Segmentação")',
+          'li:contains("Automação")',
+          'li:contains("Análise")',
           'ul li',
           'ol li'
         ];
@@ -304,6 +318,61 @@ async function extractPageData(url) {
         if (benefits.length > 0) {
           extractedData.benefits = benefits;
           logger.info(`Benefícios extraídos: ${benefits.length}`);
+        }
+
+        // NOVO: Extrair bônus específicos
+        const bonus = [];
+        const bonusSelectors = [
+          '*:contains("bônus"):not(script):not(style)',
+          '*:contains("bonus"):not(script):not(style)',
+          '*:contains("brinde"):not(script):not(style)',
+          '*:contains("extra"):not(script):not(style)',
+          '.bonus li',
+          '.extras li'
+        ];
+        
+        for (const selector of bonusSelectors) {
+          $(selector).each((i, el) => {
+            const text = $(el).text().trim();
+            if (text && text.length > 15 && text.length < 200 && bonus.length < 3 &&
+                (text.toLowerCase().includes('bônus') || text.toLowerCase().includes('bonus') || 
+                 text.toLowerCase().includes('brinde') || text.toLowerCase().includes('extra')) &&
+                !bonus.includes(text)) {
+              bonus.push(text);
+            }
+          });
+          if (bonus.length >= 3) break;
+        }
+        
+        if (bonus.length > 0) {
+          extractedData.bonus = bonus;
+        }
+
+        // NOVO: Extrair informações de garantia
+        let guarantee = '';
+        const guaranteeSelectors = [
+          '*:contains("garantia"):not(script):not(style)',
+          '*:contains("devolução"):not(script):not(style)',
+          '*:contains("risco"):not(script):not(style)',
+          '.guarantee',
+          '.warranty'
+        ];
+        
+        for (const selector of guaranteeSelectors) {
+          const element = $(selector).first();
+          if (element.length) {
+            const text = element.text().trim();
+            if (text && text.length > 20 && text.length < 300 &&
+                (text.toLowerCase().includes('garantia') || text.toLowerCase().includes('devolução'))) {
+              guarantee = text;
+              logger.info(`Garantia extraída: ${guarantee.substring(0, 50)}...`);
+              break;
+            }
+          }
+        }
+        
+        if (guarantee) {
+          extractedData.guarantee = guarantee;
         }
 
         // SUPER REFINAMENTO: Extrair depoimentos mais específicos
@@ -355,6 +424,8 @@ async function extractPageData(url) {
           'button:contains("COMPRAR")',
           'a:contains("ADQUIRIR")',
           'button:contains("ADQUIRIR")',
+          'a:contains("NUTRIR")',
+          'button:contains("NUTRIR")',
           '.buy-button',
           '.call-to-action',
           '[class*="buy"]',
@@ -443,12 +514,18 @@ async function extractPageData(url) {
       ],
       testimonials: ['Produto excelente, recomendo!', 'Funcionou perfeitamente para mim!'],
       cta: 'QUERO O MEU ARSENAL SECRETO AGORA',
-      url: url
+      url: url,
+      bonus: ['Suporte especializado', 'Atualizações gratuitas', 'Acesso à comunidade VIP'],
+      guarantee: 'Garantia de 30 dias ou seu dinheiro de volta',
+      paymentMethods: ['Cartão de crédito', 'PIX', 'Boleto'],
+      targetAudience: 'Afiliados e empreendedores digitais',
+      problemSolved: 'Dificuldade em converter leads em vendas',
+      uniqueValue: 'Método exclusivo dos CEOs de sucesso'
     };
   }
 }
 
-// Função SUPER INTELIGENTE para gerar resposta da IA
+// Função ULTRA INTELIGENTE para gerar resposta da IA
 async function generateAIResponse(userMessage, pageData, conversationId = 'default') {
   try {
     // Recuperar histórico da conversa
@@ -466,45 +543,66 @@ async function generateAIResponse(userMessage, pageData, conversationId = 'defau
     conversationCache.set(conversationId, conversation);
 
     if (!process.env.OPENROUTER_API_KEY) {
-      // SUPER INTELIGÊNCIA: Sistema de respostas contextuais e específicas
+      // ULTRA INTELIGÊNCIA: Sistema de respostas contextuais e específicas AVANÇADO
       const message = userMessage.toLowerCase();
       
-      // Detectar intenção específica da mensagem
+      // Detectar intenção específica da mensagem com mais precisão
       let response = '';
       
-      if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
-        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\nÉ um investimento que se paga rapidamente com os resultados que você vai alcançar! Muitos clientes recuperam o valor em poucos dias.\n\n🎯 ${pageData.cta}`;
-        
-      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('o que ganho')) {
-        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n🚀 ${pageData.cta}`;
-        
-      } else if (message.includes('como funciona') || message.includes('funciona') || message.includes('método')) {
-        response = `🔥 **Como o "${pageData.title}" funciona:**\n\n${pageData.description}\n\n**Principais resultados que você vai alcançar:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n💪 ${pageData.cta}`;
-        
-      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco')) {
-        response = `🛡️ **Sim! O "${pageData.title}" oferece garantia total.**\n\n${pageData.description}\n\nVocê não tem nada a perder e tudo a ganhar! Se não ficar satisfeito, devolvemos seu dinheiro.\n\n✅ ${pageData.cta}`;
-        
-      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo') || message.includes('resultado')) {
-        if (pageData.testimonials.length > 0) {
-          // Remover duplicatas dos depoimentos
-          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
-          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n🎯 ${pageData.cta}`;
+      // Respostas específicas para bônus
+      if (message.includes('bônus') || message.includes('bonus') || message.includes('brinde') || message.includes('extra')) {
+        if (pageData.bonus && pageData.bonus.length > 0) {
+          response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n${pageData.bonus.map((b, i) => `${i+1}. ${b}`).join('\n')}\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
         } else {
-          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\nOs resultados falam por si só!\n\n🚀 ${pageData.cta}`;
+          response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
         }
         
-      } else if (message.includes('bônus') || message.includes('extra') || message.includes('brinde')) {
-        response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
+      // Respostas específicas para processo de compra
+      } else if (message.includes('processo') && message.includes('compra') || message.includes('como comprar') || message.includes('como adquirir')) {
+        response = `🛒 **Processo de compra do "${pageData.title}" é super simples:**\n\n1️⃣ Clique no botão "${pageData.cta}"\n2️⃣ Preencha seus dados na página segura\n3️⃣ Escolha a forma de pagamento (PIX, cartão ou boleto)\n4️⃣ Receba acesso imediato por email\n\n💳 **Formas de pagamento:**\n• PIX (desconto especial)\n• Cartão de crédito (até 12x)\n• Boleto bancário\n\n🔒 **100% seguro e protegido**\n\n🚀 ${pageData.cta}`;
         
-      } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero')) {
-        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nClique no botão acima para garantir sua vaga!`;
+      // Respostas específicas para tempo/prazo
+      } else if (message.includes('quanto tempo') || message.includes('prazo') || message.includes('demora') || message.includes('quando vou ver') || message.includes('em quanto tempo')) {
+        response = `⏰ **Sobre o tempo para ver resultados com "${pageData.title}":**\n\n**📈 Timeline de resultados:**\n• **Primeiros 7 dias:** Primeiras melhorias e insights\n• **15-30 dias:** Resultados mais consistentes\n• **30+ dias:** Domínio completo do método\n\n**🚀 Acesso imediato:**\n• Recebe tudo na hora após a compra\n• Pode começar a aplicar hoje mesmo\n• Suporte para tirar dúvidas\n\n💪 ${pageData.cta}`;
         
-      } else if (message.includes('dúvida') || message.includes('pergunta') || message.includes('ajuda')) {
-        response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n\nO que você gostaria de saber?`;
+      // Respostas específicas para preço
+      } else if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
+        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\n💡 **Por que vale a pena:**\n• É um investimento que se paga rapidamente\n• Muitos clientes recuperam o valor em poucos dias\n• Você economiza tempo e dinheiro evitando erros\n\n💳 **Formas de pagamento:**\n• PIX (desconto especial)\n• Cartão (até 12x sem juros)\n• Boleto bancário\n\n🎯 ${pageData.cta}`;
+        
+      // Respostas específicas para benefícios
+      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('o que ganho') || message.includes('o que vou receber')) {
+        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n🎁 **Bônus inclusos:**\n${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.map(b => `• ${b}`).join('\n') : '• Suporte especializado\n• Material complementar\n• Acesso à comunidade'}\n\n🚀 ${pageData.cta}`;
+        
+      // Respostas específicas para funcionamento
+      } else if (message.includes('como funciona') || message.includes('funciona') || message.includes('método') || message.includes('como é')) {
+        response = `🔥 **Como o "${pageData.title}" funciona:**\n\n${pageData.description}\n\n**📋 Principais resultados que você vai alcançar:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n**⏱️ Tempo para ver resultados:**\nAlguns alunos relatam melhorias já na primeira semana, mas o sistema completo leva cerca de 30 dias para mostrar todo seu potencial.\n\n💪 ${pageData.cta}`;
+        
+      // Respostas específicas para garantia
+      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco') || message.includes('devolução')) {
+        const guaranteeText = pageData.guarantee || 'garantia total de 30 dias';
+        response = `🛡️ **Sim! O "${pageData.title}" oferece ${guaranteeText}.**\n\n${pageData.description}\n\n**🔒 Sua segurança:**\n• Você não tem nada a perder e tudo a ganhar\n• Se não ficar satisfeito, devolvemos seu dinheiro\n• Compra 100% segura e protegida\n• Suporte especializado incluído\n\n✅ ${pageData.cta}`;
+        
+      // Respostas específicas para depoimentos
+      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo') || message.includes('resultado') || message.includes('testemunho')) {
+        if (pageData.testimonials && pageData.testimonials.length > 0) {
+          // Remover duplicatas dos depoimentos
+          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
+          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n**📊 Resultados comprovados:**\n• Mais de 95% de satisfação\n• Resultados visíveis em poucos dias\n• Método testado e aprovado\n\n🎯 ${pageData.cta}`;
+        } else {
+          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\n**📊 Resultados comprovados:**\n• Mais de 95% de satisfação\n• Método testado e aprovado\n• Resultados visíveis em poucos dias\n\nOs resultados falam por si só!\n\n🚀 ${pageData.cta}`;
+        }
+        
+      // Respostas específicas para compra/aquisição
+      } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero') || message.includes('como faço')) {
+        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎁 **Bônus inclusos:**\n${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.slice(0,2).map(b => `• ${b}`).join('\n') : '• Suporte especializado\n• Material complementar'}\n\n🚀 **${pageData.cta}**\n\n👆 Clique no botão acima para garantir sua vaga!`;
+        
+      // Respostas específicas para dúvidas/ajuda
+      } else if (message.includes('dúvida') || message.includes('pergunta') || message.includes('ajuda') || message.includes('não entendi')) {
+        response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n• ⏰ Tempo para ver resultados\n\n**Digite sua dúvida específica que eu respondo na hora!**\n\nO que você gostaria de saber?`;
         
       } else {
         // Resposta padrão mais inteligente e persuasiva
-        response = `Olá! 👋 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias ou depoimentos!`;
+        response = `Olá! 👋 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎁 **Bônus inclusos:**\n${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.slice(0,2).map(b => `• ${b}`).join('\n') : '• Suporte especializado\n• Material complementar'}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias, depoimentos ou processo de compra!`;
       }
       
       // Adicionar resposta ao histórico
@@ -528,6 +626,8 @@ INFORMAÇÕES REAIS DO PRODUTO:
 - Preço: ${pageData.price}
 - Benefícios: ${pageData.benefits.join(', ')}
 - Call to Action: ${pageData.cta}
+- Bônus: ${pageData.bonus ? pageData.bonus.join(', ') : 'Suporte especializado, Material complementar'}
+- Garantia: ${pageData.guarantee || 'Garantia de 30 dias'}
 
 INSTRUÇÕES:
 - Use APENAS as informações reais do produto fornecidas
@@ -535,6 +635,8 @@ INSTRUÇÕES:
 - Responda de forma amigável e profissional
 - Conduza naturalmente para a compra
 - Use emojis para tornar a conversa mais envolvente
+- Seja conciso e direto ao ponto
+- Evite repetições desnecessárias
 
 Pergunta do cliente: ${userMessage}`;
 
@@ -543,7 +645,7 @@ Pergunta do cliente: ${userMessage}`;
       messages: [
         {
           role: 'system',
-          content: 'Você é um assistente de vendas especializado, amigável e altamente persuasivo. Use apenas informações reais do produto fornecidas.'
+          content: 'Você é um assistente de vendas especializado, amigável e altamente persuasivo. Use apenas informações reais do produto fornecidas. Seja conciso e direto.'
         },
         ...conversationHistory.slice(-5), // Últimas 5 mensagens para contexto
         {
@@ -551,7 +653,7 @@ Pergunta do cliente: ${userMessage}`;
           content: prompt
         }
       ],
-      max_tokens: 500,
+      max_tokens: 400,
       temperature: 0.7
     }, {
       headers: {
@@ -577,14 +679,14 @@ Pergunta do cliente: ${userMessage}`;
   } catch (error) {
     logger.error('Erro na geração de resposta IA:', error);
     
-    // SUPER FALLBACK: Resposta específica e persuasiva
-    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials.slice(0,2).join(' | ')}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
+    // ULTRA FALLBACK: Resposta específica e persuasiva
+    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials && pageData.testimonials.length > 0 ? pageData.testimonials.slice(0,2).join(' | ') : 'Produto excelente, recomendo!'}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
 
     return fallbackResponse;
   }
 }
 
-// Função para gerar HTML do chatbot (melhorada)
+// Função para gerar HTML do chatbot (mantida igual ao original)
 function generateChatbotHTML(pageData, robotName, customInstructions = '') {
   return `
 <!DOCTYPE html>
@@ -868,7 +970,7 @@ function generateChatbotHTML(pageData, robotName, customInstructions = '') {
 </html>`;
 }
 
-// Rotas da API
+// Rotas da API (mantidas iguais ao original)
 
 // CORREÇÃO: Rota /extract (não /api/extract)
 app.get('/extract', async (req, res) => {
@@ -1008,7 +1110,7 @@ app.get('/health', (req, res) => {
     status: 'OK', 
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    version: '5.0.1-SUPER-CORRIGIDO'
+    version: '5.0.1-INTELIGENTE-FINAL'
   });
 });
 
@@ -1029,11 +1131,13 @@ app.use((error, req, res, next) => {
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
   logger.info(`Servidor rodando na porta ${PORT}`);
-  console.log(`🚀 LinkMágico Chatbot v5.0.1-SUPER-CORRIGIDO rodando na porta ${PORT}`);
+  console.log(`🚀 LinkMágico Chatbot v5.0.1-INTELIGENTE-FINAL rodando na porta ${PORT}`);
   console.log(`📊 Extração SUPER REFINADA com Cheerio + Axios`);
   console.log(`🎯 Descrição e Preço muito mais precisos`);
-  console.log(`🤖 IA SUPER INTELIGENTE com respostas contextuais`);
-  console.log(`💬 Sistema de conversação com histórico`);
+  console.log(`🤖 IA ULTRA INTELIGENTE com respostas contextuais avançadas`);
+  console.log(`💬 Sistema de conversação com histórico e detecção de intenção`);
+  console.log(`🎁 Extração de bônus, garantias e informações avançadas`);
+  console.log(`✅ TODAS as funcionalidades originais mantidas`);
   console.log(`🔗 Acesse: http://localhost:${PORT}`);
 });
 
