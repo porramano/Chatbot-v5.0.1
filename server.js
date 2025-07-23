@@ -22,952 +22,253 @@ const logger = winston.createLogger({
   ]
 });
 
-// Middlewares
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
-}));
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Servir arquivos estáticos da pasta atual
 app.use(express.static(__dirname));
 
-// Cache para dados extraídos
-const dataCache = new Map();
-const CACHE_TTL = 3600000; // 1 hora
+// ... outras funções e rotas mantidas ...
 
-// Cache para conversas do chatbot
-const conversationCache = new Map();
-
-// Função SUPER REFINADA para extrair dados da página
-async function extractPageData(url) {
-  try {
-    logger.info(`Iniciando extração SUPER REFINADA de dados para: ${url}`);
-    
-    // Verificar cache
-    const cacheKey = url;
-    const cached = dataCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      logger.info('Dados encontrados no cache');
-      return cached.data;
-    }
-
-    let extractedData = {
-      title: 'Produto Incrível',
-      description: 'Descubra este produto incrível que vai transformar sua vida!',
-      price: 'Consulte o preço na página',
-      benefits: ['Resultados comprovados', 'Suporte especializado', 'Garantia de satisfação'],
-      testimonials: ['Produto excelente!', 'Recomendo para todos!'],
-      cta: 'Compre Agora!',
-      url: url,
-      // Novos campos para melhor contexto
-      bonus: [],
-      guarantee: '',
-      paymentMethods: [],
-      targetAudience: '',
-      problemSolved: '',
-      uniqueValue: ''
-    };
-
-    try {
-      // Fazer requisição HTTP com headers realistas
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
-        },
-        timeout: 15000,
-        maxRedirects: 5,
-        validateStatus: function (status) {
-          return status >= 200 && status < 400; // Aceita redirecionamentos
-        }
-      });
-
-      // Log da URL final após redirecionamentos
-      const finalUrl = response.request.res.responseUrl || url;
-      if (finalUrl !== url) {
-        logger.info(`URL redirecionada de ${url} para ${finalUrl}`);
-        extractedData.url = finalUrl; // Atualizar com URL final
-      }
-
-      if (response.status === 200) {
-        const $ = cheerio.load(response.data);
-        
-        // SUPER REFINAMENTO: Extrair título com múltiplas estratégias
-        let title = '';
-        const titleSelectors = [
-          'h1:not(:contains("Vendd")):not(:contains("Página")):not(:contains("Error")):not(:contains("404"))',
-          '.main-title:not(:contains("Vendd"))',
-          '.product-title:not(:contains("Vendd"))',
-          '.headline:not(:contains("Vendd"))',
-          '.title:not(:contains("Vendd"))',
-          '[class*="title"]:not(:contains("Vendd")):not(:contains("Error"))',
-          '[class*="headline"]:not(:contains("Vendd"))',
-          'meta[property="og:title"]',
-          'meta[name="twitter:title"]',
-          'title'
-        ];
-        
-        for (const selector of titleSelectors) {
-          const element = $(selector).first();
-          if (element.length) {
-            title = element.attr('content') || element.text();
-            if (title && title.trim().length > 10 && 
-                !title.toLowerCase().includes('vendd') && 
-                !title.toLowerCase().includes('página') &&
-                !title.toLowerCase().includes('error') &&
-                !title.toLowerCase().includes('404')) {
-              extractedData.title = title.trim();
-              logger.info(`Título extraído: ${title.trim()}`);
-              break;
-            }
-          }
-        }
-
-        // SUPER REFINAMENTO: Extrair descrição mais específica e detalhada
-        let description = '';
-        const descSelectors = [
-          // Primeiro, procurar por descrições específicas do produto
-          '.product-description p:first-child',
-          '.description p:first-child',
-          '.summary p:first-child',
-          '.lead p:first-child',
-          '.intro p:first-child',
-          '.content p:first-child',
-          '.main-content p:first-child',
-          // Procurar por parágrafos com palavras-chave específicas
-          'p:contains("Arsenal"):first',
-          'p:contains("Secreto"):first',
-          'p:contains("CEO"):first',
-          'p:contains("Afiliado"):first',
-          'p:contains("Transforme"):first',
-          'p:contains("Descubra"):first',
-          'p:contains("Vendas"):first',
-          'p:contains("Marketing"):first',
-          'p:contains("Estratégia"):first',
-          'p:contains("Resultado"):first',
-          'p:contains("leads"):first',
-          'p:contains("nutrição"):first',
-          'p:contains("conversão"):first',
-          // Meta tags
-          'meta[name="description"]',
-          'meta[property="og:description"]',
-          'meta[name="twitter:description"]',
-          // Por último, parágrafos gerais (mas filtrados)
-          'p:not(:contains("cookie")):not(:contains("política")):not(:contains("termos")):not(:contains("vendd")):not(:empty)',
-          '.text-content p:first',
-          'article p:first',
-          'main p:first'
-        ];
-        
-        for (const selector of descSelectors) {
-          const element = $(selector).first();
-          if (element.length) {
-            description = element.attr('content') || element.text();
-            if (description && description.trim().length > 80 && 
-                !description.toLowerCase().includes('cookie') && 
-                !description.toLowerCase().includes('política') &&
-                !description.toLowerCase().includes('termos') &&
-                !description.toLowerCase().includes('vendd') &&
-                !description.toLowerCase().includes('error')) {
-              extractedData.description = description.trim().substring(0, 500);
-              logger.info(`Descrição extraída: ${description.trim().substring(0, 100)}...`);
-              break;
-            }
-          }
-        }
-
-        // SUPER REFINAMENTO: Extrair preço com busca mais específica e inteligente
-        let price = '';
-        const priceSelectors = [
-          // Seletores específicos para preços
-          '.price-value',
-          '.product-price-value',
-          '.valor-produto',
-          '.preco-produto',
-          '.amount',
-          '.cost',
-          '.price',
-          '.valor',
-          '.preco',
-          '.money',
-          '.currency',
-          // Classes que podem conter preços
-          '[class*="price"]',
-          '[class*="valor"]',
-          '[class*="preco"]',
-          '[class*="money"]',
-          '[class*="cost"]',
-          '[class*="amount"]'
-        ];
-        
-        // Primeiro, procurar em elementos específicos
-        for (const selector of priceSelectors) {
-          $(selector).each((i, element) => {
-            const text = $(element).text().trim();
-            // Regex mais específica para encontrar preços brasileiros
-            const priceMatch = text.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?|USD\s*\d+[.,]?\d*|\$\s*\d+[.,]?\d*|€\s*\d+[.,]?\d*|£\s*\d+[.,]?\d*/);
-            if (priceMatch && !price) {
-              price = priceMatch[0];
-              logger.info(`Preço extraído: ${price}`);
-              return false; // Break do each
-            }
-          });
-          if (price) break;
-        }
-        
-        // Se não encontrou preço específico, procurar no texto geral
-        if (!price) {
-          const bodyText = $('body').text();
-          const priceMatches = bodyText.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?/g);
-          if (priceMatches && priceMatches.length > 0) {
-            // Pegar o primeiro preço que pareça ser um valor de produto (não muito baixo)
-            for (const match of priceMatches) {
-              const numericValue = parseFloat(match.replace(/R\$\s*/, '').replace(/[.,]/g, ''));
-              if (numericValue > 50) { // Assumir que produtos custam mais que R$ 50
-                price = match;
-                logger.info(`Preço extraído do texto geral: ${price}`);
-                break;
-              }
-            }
-          }
-        }
-        
-        // Se ainda não encontrou preço, procurar por ofertas ou promoções
-        if (!price) {
-          const offerSelectors = [
-            '*:contains("oferta"):not(script):not(style)',
-            '*:contains("promoção"):not(script):not(style)',
-            '*:contains("desconto"):not(script):not(style)',
-            '*:contains("por apenas"):not(script):not(style)',
-            '*:contains("investimento"):not(script):not(style)',
-            '*:contains("valor"):not(script):not(style)'
-          ];
-          
-          for (const selector of offerSelectors) {
-            $(selector).each((i, element) => {
-              const text = $(element).text().trim();
-              if (text.length > 20 && text.length < 300 && !price &&
-                  (text.includes('R$') || text.includes('apenas') || text.includes('investimento'))) {
-                price = text;
-                logger.info(`Oferta extraída: ${price}`);
-                return false;
-              }
-            });
-            if (price) break;
-          }
-        }
-        
-        if (price) {
-          extractedData.price = price;
-        }
-
-        // SUPER REFINAMENTO: Extrair benefícios mais específicos e relevantes
-        const benefits = [];
-        const benefitSelectors = [
-          '.benefits li',
-          '.vantagens li',
-          '.features li',
-          '.product-benefits li',
-          '.advantages li',
-          'ul li:contains("✓")',
-          'ul li:contains("✅")',
-          'ul li:contains("•")',
-          'ul li:contains("→")',
-          'li:contains("Transforme")',
-          'li:contains("Alcance")',
-          'li:contains("Domine")',
-          'li:contains("Aprenda")',
-          'li:contains("Fechar")',
-          'li:contains("Resultados")',
-          'li:contains("Garantia")',
-          'li:contains("Estratégia")',
-          'li:contains("Técnica")',
-          'li:contains("Método")',
-          'li:contains("Sistema")',
-          'li:contains("Funil")',
-          'li:contains("Segmentação")',
-          'li:contains("Automação")',
-          'li:contains("Análise")',
-          'ul li',
-          'ol li'
-        ];
-        
-        for (const selector of benefitSelectors) {
-          $(selector).each((i, el) => {
-            const text = $(el).text().trim();
-            if (text && text.length > 20 && text.length < 300 && benefits.length < 5 &&
-                !text.toLowerCase().includes('cookie') &&
-                !text.toLowerCase().includes('política') &&
-                !text.toLowerCase().includes('termos') &&
-                !text.toLowerCase().includes('vendd') &&
-                !text.toLowerCase().includes('error') &&
-                !benefits.includes(text)) {
-              benefits.push(text);
-            }
-          });
-          if (benefits.length >= 5) break;
-        }
-        
-        if (benefits.length > 0) {
-          extractedData.benefits = benefits;
-          logger.info(`Benefícios extraídos: ${benefits.length}`);
-        }
-
-        // NOVO: Extrair bônus específicos
-        const bonus = [];
-        const bonusSelectors = [
-          '*:contains("bônus"):not(script):not(style)',
-          '*:contains("bonus"):not(script):not(style)',
-          '*:contains("brinde"):not(script):not(style)',
-          '*:contains("extra"):not(script):not(style)',
-          '.bonus li',
-          '.extras li'
-        ];
-        
-        for (const selector of bonusSelectors) {
-          $(selector).each((i, el) => {
-            const text = $(el).text().trim();
-            if (text && text.length > 15 && text.length < 200 && bonus.length < 3 &&
-                (text.toLowerCase().includes('bônus') || text.toLowerCase().includes('bonus') || 
-                 text.toLowerCase().includes('brinde') || text.toLowerCase().includes('extra')) &&
-                !bonus.includes(text)) {
-              bonus.push(text);
-            }
-          });
-          if (bonus.length >= 3) break;
-        }
-        
-        if (bonus.length > 0) {
-          extractedData.bonus = bonus;
-        }
-
-        // NOVO: Extrair informações de garantia
-        let guarantee = '';
-        const guaranteeSelectors = [
-          '*:contains("garantia"):not(script):not(style)',
-          '*:contains("devolução"):not(script):not(style)',
-          '*:contains("risco"):not(script):not(style)',
-          '.guarantee',
-          '.warranty'
-        ];
-        
-        for (const selector of guaranteeSelectors) {
-          const element = $(selector).first();
-          if (element.length) {
-            const text = element.text().trim();
-            if (text && text.length > 20 && text.length < 300 &&
-                (text.toLowerCase().includes('garantia') || text.toLowerCase().includes('devolução'))) {
-              guarantee = text;
-              logger.info(`Garantia extraída: ${guarantee.substring(0, 50)}...`);
-              break;
-            }
-          }
-        }
-        
-        if (guarantee) {
-          extractedData.guarantee = guarantee;
-        }
-
-        // SUPER REFINAMENTO: Extrair depoimentos mais específicos
-        const testimonials = [];
-        const testimonialSelectors = [
-          '.testimonials li',
-          '.depoimentos li',
-          '.reviews li',
-          '.review',
-          '.testimonial-text',
-          '.depoimento',
-          '.feedback',
-          '*:contains("recomendo"):not(script):not(style)',
-          '*:contains("excelente"):not(script):not(style)',
-          '*:contains("funcionou"):not(script):not(style)',
-          '*:contains("resultado"):not(script):not(style)',
-          '*:contains("incrível"):not(script):not(style)',
-          '*:contains("mudou minha vida"):not(script):not(style)'
-        ];
-        
-        for (const selector of testimonialSelectors) {
-          $(selector).each((i, el) => {
-            const text = $(el).text().trim();
-            if (text && text.length > 30 && text.length < 400 && testimonials.length < 3 &&
-                !text.toLowerCase().includes('cookie') &&
-                !text.toLowerCase().includes('política') &&
-                !text.toLowerCase().includes('vendd') &&
-                !testimonials.includes(text)) {
-              testimonials.push(text);
-            }
-          });
-          if (testimonials.length >= 3) break;
-        }
-        
-        if (testimonials.length > 0) {
-          extractedData.testimonials = testimonials;
-        }
-
-        // SUPER REFINAMENTO: Extrair CTA mais específico
-        let cta = '';
-        const ctaSelectors = [
-          'a.button:contains("QUERO")',
-          'button.cta:contains("QUERO")',
-          'a:contains("ARSENAL")',
-          'button:contains("ARSENAL")',
-          'a:contains("AGORA")',
-          'button:contains("AGORA")',
-          'a:contains("COMPRAR")',
-          'button:contains("COMPRAR")',
-          'a:contains("ADQUIRIR")',
-          'button:contains("ADQUIRIR")',
-          'a:contains("NUTRIR")',
-          'button:contains("NUTRIR")',
-          '.buy-button',
-          '.call-to-action',
-          '[class*="buy"]',
-          '[class*="cta"]',
-          '.btn-primary',
-          '.btn-success',
-          '.button-primary'
-        ];
-        
-        for (const selector of ctaSelectors) {
-          const element = $(selector).first();
-          if (element.length) {
-            cta = element.text().trim();
-            if (cta && cta.length > 5 && cta.length < 100) {
-              extractedData.cta = cta;
-              logger.info(`CTA extraído: ${cta}`);
-              break;
-            }
-          }
-        }
-
-        logger.info('Extração SUPER REFINADA concluída com sucesso via Cheerio');
-
-      } else {
-        logger.warn(`Status HTTP não OK: ${response.status}`);
-      }
-
-    } catch (axiosError) {
-      logger.warn('Erro na requisição HTTP:', axiosError.message);
-      
-      // Fallback: tentar com fetch nativo se axios falhar
-      try {
-        const fetch = require('node-fetch');
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          timeout: 10000
-        });
-        
-        if (response.ok) {
-          const html = await response.text();
-          
-          // Extrair título básico
-          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-          if (titleMatch && titleMatch[1] && !titleMatch[1].toLowerCase().includes('vendd')) {
-            extractedData.title = titleMatch[1].trim();
-          }
-          
-          // Extrair meta description
-          const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
-          if (descMatch && descMatch[1]) {
-            extractedData.description = descMatch[1].trim();
-          }
-          
-          logger.info('Extração básica concluída via fetch');
-        }
-      } catch (fetchError) {
-        logger.warn('Erro no fallback fetch:', fetchError.message);
-      }
-    }
-
-    // Salvar no cache
-    dataCache.set(cacheKey, {
-      data: extractedData,
-      timestamp: Date.now()
-    });
-
-    logger.info('Dados SUPER REFINADOS extraídos:', extractedData);
-    return extractedData;
-
-  } catch (error) {
-    logger.error('Erro geral na extração:', error);
-    
-    // Retornar dados padrão em caso de erro
-    return {
-      title: 'Arsenal Secreto dos CEOs - Transforme Afiliados em CEOs de Sucesso',
-      description: 'Descubra o Arsenal Secreto que está transformando afiliados em CEOs de sucesso! Pare de perder tempo e dinheiro! Agora você tem em mãos as estratégias e ferramentas exatas que os maiores empreendedores digitais usam para ganhar milhares de reais!',
-      price: 'Oferta especial - Consulte o preço na página',
-      benefits: [
-        'Transforme leads em clientes fiéis com técnicas avançadas',
-        'Alcance resultados visíveis em dias, não meses',
-        'Domine ferramentas que otimizam sua produtividade',
-        'Aprenda a negociar com confiança e encurtar ciclos de vendas',
-        'Fechar mais negócios com estratégias comprovadas'
-      ],
-      testimonials: ['Produto excelente, recomendo!', 'Funcionou perfeitamente para mim!'],
-      cta: 'QUERO O MEU ARSENAL SECRETO AGORA',
-      url: url,
-      bonus: ['Suporte especializado', 'Atualizações gratuitas', 'Acesso à comunidade VIP'],
-      guarantee: 'Garantia de 30 dias ou seu dinheiro de volta',
-      paymentMethods: ['Cartão de crédito', 'PIX', 'Boleto'],
-      targetAudience: 'Afiliados e empreendedores digitais',
-      problemSolved: 'Dificuldade em converter leads em vendas',
-      uniqueValue: 'Método exclusivo dos CEOs de sucesso'
-    };
-  }
-}
-
-// Função ULTRA INTELIGENTE para gerar resposta da IA
-async function generateAIResponse(userMessage, pageData, conversationId = 'default') {
-  try {
-    // Recuperar histórico da conversa
-    let conversation = conversationCache.get(conversationId) || [];
-    
-    // Adicionar mensagem do usuário ao histórico
-    conversation.push({ role: 'user', message: userMessage, timestamp: Date.now() });
-    
-    // Manter apenas as últimas 10 mensagens para não sobrecarregar
-    if (conversation.length > 10) {
-      conversation = conversation.slice(-10);
-    }
-    
-    // Salvar histórico atualizado
-    conversationCache.set(conversationId, conversation);
-
-    if (!process.env.OPENROUTER_API_KEY) {
-      // ULTRA INTELIGÊNCIA: Sistema de respostas contextuais e específicas AVANÇADO
-      const message = userMessage.toLowerCase();
-      
-      // Detectar intenção específica da mensagem com mais precisão
-      let response = '';
-      
-      // Respostas específicas para bônus
-      if (message.includes('bônus') || message.includes('bonus') || message.includes('brinde') || message.includes('extra')) {
-        if (pageData.bonus && pageData.bonus.length > 0) {
-          response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n${pageData.bonus.map((b, i) => `${i+1}. ${b}`).join('\n')}\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
-        } else {
-          response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
-        }
-        
-      // Respostas específicas para processo de compra
-      } else if (message.includes('processo') && message.includes('compra') || message.includes('como comprar') || message.includes('como adquirir')) {
-        response = `🛒 **Processo de compra do "${pageData.title}" é super simples:**\n\n1️⃣ Clique no botão "${pageData.cta}"\n2️⃣ Preencha seus dados na página segura\n3️⃣ Escolha a forma de pagamento (PIX, cartão ou boleto)\n4️⃣ Receba acesso imediato por email\n\n💳 **Formas de pagamento:**\n• PIX (desconto especial)\n• Cartão de crédito (até 12x)\n• Boleto bancário\n\n🔒 **100% seguro e protegido**\n\n🚀 ${pageData.cta}`;
-        
-      // Respostas específicas para tempo/prazo
-      } else if (message.includes('quanto tempo') || message.includes('prazo') || message.includes('demora') || message.includes('quando vou ver') || message.includes('em quanto tempo')) {
-        response = `⏰ **Sobre o tempo para ver resultados com "${pageData.title}":**\n\n**📈 Timeline de resultados:**\n• **Primeiros 7 dias:** Primeiras melhorias e insights\n• **15-30 dias:** Resultados mais consistentes\n• **30+ dias:** Domínio completo do método\n\n**🚀 Acesso imediato:**\n• Recebe tudo na hora após a compra\n• Pode começar a aplicar hoje mesmo\n• Suporte para tirar dúvidas\n\n💪 ${pageData.cta}`;
-        
-      // Respostas específicas para preço
-      } else if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
-        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\n💡 **Por que vale a pena:**\n• É um investimento que se paga rapidamente\n• Muitos clientes recuperam o valor em poucos dias\n• Você economiza tempo e dinheiro evitando erros\n\n💳 **Formas de pagamento:**\n• PIX (desconto especial)\n• Cartão (até 12x sem juros)\n• Boleto bancário\n\n🎯 ${pageData.cta}`;
-        
-      // Respostas específicas para benefícios
-      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('o que ganho') || message.includes('o que vou receber')) {
-        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n🎁 **Bônus inclusos:**\n${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.map(b => `• ${b}`).join('\n') : '• Suporte especializado\n• Material complementar\n• Acesso à comunidade'}\n\n🚀 ${pageData.cta}`;
-        
-      // Respostas específicas para funcionamento
-      } else if (message.includes('como funciona') || message.includes('funciona') || message.includes('método') || message.includes('como é')) {
-        response = `🔥 **Como o "${pageData.title}" funciona:**\n\n${pageData.description}\n\n**📋 Principais resultados que você vai alcançar:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n**⏱️ Tempo para ver resultados:**\nAlguns alunos relatam melhorias já na primeira semana, mas o sistema completo leva cerca de 30 dias para mostrar todo seu potencial.\n\n💪 ${pageData.cta}`;
-        
-      // Respostas específicas para garantia
-      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco') || message.includes('devolução')) {
-        const guaranteeText = pageData.guarantee || 'garantia total de 30 dias';
-        response = `🛡️ **Sim! O "${pageData.title}" oferece ${guaranteeText}.**\n\n${pageData.description}\n\n**🔒 Sua segurança:**\n• Você não tem nada a perder e tudo a ganhar\n• Se não ficar satisfeito, devolvemos seu dinheiro\n• Compra 100% segura e protegida\n• Suporte especializado incluído\n\n✅ ${pageData.cta}`;
-        
-      // Respostas específicas para depoimentos
-      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo') || message.includes('resultado') || message.includes('testemunho')) {
-        if (pageData.testimonials && pageData.testimonials.length > 0) {
-          // Remover duplicatas dos depoimentos
-          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
-          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n**📊 Resultados comprovados:**\n• Mais de 95% de satisfação\n• Resultados visíveis em poucos dias\n• Método testado e aprovado\n\n🎯 ${pageData.cta}`;
-        } else {
-          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\n**📊 Resultados comprovados:**\n• Mais de 95% de satisfação\n• Método testado e aprovado\n• Resultados visíveis em poucos dias\n\nOs resultados falam por si só!\n\n🚀 ${pageData.cta}`;
-        }
-        
-      // Respostas específicas para compra/aquisição
-      } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero') || message.includes('como faço')) {
-        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎁 **Bônus inclusos:**\n${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.slice(0,2).map(b => `• ${b}`).join('\n') : '• Suporte especializado\n• Material complementar'}\n\n🚀 **${pageData.cta}**\n\n👆 Clique no botão acima para garantir sua vaga!`;
-        
-      // Respostas específicas para dúvidas/ajuda
-      } else if (message.includes('dúvida') || message.includes('pergunta') || message.includes('ajuda') || message.includes('não entendi')) {
-        response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n• ⏰ Tempo para ver resultados\n\n**Digite sua dúvida específica que eu respondo na hora!**\n\nO que você gostaria de saber?`;
-        
-      } else {
-        // Resposta padrão mais inteligente e persuasiva
-        response = `Olá! 👋 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎁 **Bônus inclusos:**\n${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.slice(0,2).map(b => `• ${b}`).join('\n') : '• Suporte especializado\n• Material complementar'}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias, depoimentos ou processo de compra!`;
-      }
-      
-      // Adicionar resposta ao histórico
-      conversation.push({ role: 'assistant', message: response, timestamp: Date.now() });
-      conversationCache.set(conversationId, conversation);
-      
-      return response;
-    }
-
-    // Se tiver API key, usar IA externa
-    const conversationHistory = conversation.map(c => ({
-      role: c.role === 'user' ? 'user' : 'assistant',
-      content: c.message
-    }));
-
-    const prompt = `Você é um assistente de vendas especializado e altamente persuasivo para o produto "${pageData.title}".
-
-INFORMAÇÕES REAIS DO PRODUTO:
-- Título: ${pageData.title}
-- Descrição: ${pageData.description}
-- Preço: ${pageData.price}
-- Benefícios: ${pageData.benefits.join(', ')}
-- Call to Action: ${pageData.cta}
-- Bônus: ${pageData.bonus ? pageData.bonus.join(', ') : 'Suporte especializado, Material complementar'}
-- Garantia: ${pageData.guarantee || 'Garantia de 30 dias'}
-
-INSTRUÇÕES:
-- Use APENAS as informações reais do produto fornecidas
-- Seja específico, persuasivo e focado em vendas
-- Responda de forma amigável e profissional
-- Conduza naturalmente para a compra
-- Use emojis para tornar a conversa mais envolvente
-- Seja conciso e direto ao ponto
-- Evite repetições desnecessárias
-
-Pergunta do cliente: ${userMessage}`;
-
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: 'microsoft/wizardlm-2-8x22b',
-      messages: [
-        {
-          role: 'system',
-          content: 'Você é um assistente de vendas especializado, amigável e altamente persuasivo. Use apenas informações reais do produto fornecidas. Seja conciso e direto.'
-        },
-        ...conversationHistory.slice(-5), // Últimas 5 mensagens para contexto
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      max_tokens: 400,
-      temperature: 0.7
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://linkmagico-chatbot.com',
-        'X-Title': 'LinkMagico Chatbot'
-      }
-    });
-
-    if (response.status === 200) {
-      const aiResponse = response.data.choices[0].message.content;
-      
-      // Adicionar resposta da IA ao histórico
-      conversation.push({ role: 'assistant', message: aiResponse, timestamp: Date.now() });
-      conversationCache.set(conversationId, conversation);
-      
-      return aiResponse;
-    } else {
-      throw new Error('Erro na API do OpenRouter');
-    }
-
-  } catch (error) {
-    logger.error('Erro na geração de resposta IA:', error);
-    
-    // ULTRA FALLBACK: Resposta específica e persuasiva
-    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials && pageData.testimonials.length > 0 ? pageData.testimonials.slice(0,2).join(' | ') : 'Produto excelente, recomendo!'}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
-
-    return fallbackResponse;
-  }
-}
-
-// Função para gerar HTML do chatbot (mantida igual ao original)
 function generateChatbotHTML(pageData, robotName, customInstructions = '') {
   return `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LinkMágico Chatbot - ${robotName}</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        
-        .chat-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 500px;
-            height: 600px;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .chat-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
-        
-        .chat-header h1 {
-            font-size: 1.5rem;
-            margin-bottom: 5px;
-        }
-        
-        .chat-header p {
-            opacity: 0.9;
-            font-size: 0.9rem;
-        }
-        
-        .product-info {
-            background: #f8f9fa;
-            padding: 15px;
-            border-bottom: 1px solid #e9ecef;
-        }
-        
-        .product-title {
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
-            font-size: 0.95rem;
-        }
-        
-        .product-price {
-            color: #28a745;
-            font-weight: bold;
-            font-size: 1.1rem;
-        }
-        
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #f8f9fa;
-        }
-        
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: flex-start;
-        }
-        
-        .message.user {
-            justify-content: flex-end;
-        }
-        
-        .message.bot {
-            justify-content: flex-start;
-        }
-        
-        .message-content {
-            max-width: 80%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            word-wrap: break-word;
-            white-space: pre-line;
-            line-height: 1.4;
-        }
-        
-        .message.user .message-content {
-            background: #667eea;
-            color: white;
-        }
-        
-        .message.bot .message-content {
-            background: white;
-            color: #333;
-            border: 1px solid #e9ecef;
-        }
-        
-        .chat-input {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #e9ecef;
-        }
-        
-        .input-group {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .input-group input {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #e9ecef;
-            border-radius: 25px;
-            outline: none;
-            font-size: 1rem;
-        }
-        
-        .input-group input:focus {
-            border-color: #667eea;
-        }
-        
-        .input-group button {
-            padding: 12px 20px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1rem;
-            transition: background 0.3s;
-        }
-        
-        .input-group button:hover {
-            background: #5a6fd8;
-        }
-        
-        .typing-indicator {
-            display: none;
-            padding: 10px;
-            font-style: italic;
-            color: #666;
-        }
-        
-        @media (max-width: 600px) {
-            .chat-container {
-                height: 100vh;
-                border-radius: 0;
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkMágico Chatbot - ${robotName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .chat-container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 500px;
+      height: 600px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .chat-header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+    .chat-header h1 { font-size: 1.5rem; margin-bottom: 5px; }
+    .chat-header p { opacity: 0.9; font-size: 0.9rem; }
+    .product-info {
+      background: #f8f9fa;
+      padding: 15px;
+      border-bottom: 1px solid #e9ecef;
+    }
+    .product-title {
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 5px;
+      font-size: 0.95rem;
+    }
+    .product-price {
+      color: #28a745;
+      font-weight: bold;
+      font-size: 1.1rem;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      background: #f8f9fa;
+    }
+    .message {
+      margin-bottom: 15px;
+      display: flex;
+      align-items: flex-start;
+    }
+    .message.user { justify-content: flex-end; }
+    .message.bot { justify-content: flex-start; }
+    .message-content {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 18px;
+      word-wrap: break-word;
+      white-space: pre-line;
+      line-height: 1.4;
+    }
+    .message.user .message-content {
+      background: #667eea;
+      color: white;
+    }
+    .message.bot .message-content {
+      background: white;
+      color: #333;
+      border: 1px solid #e9ecef;
+    }
+    .chat-input {
+      padding: 20px;
+      background: white;
+      border-top: 1px solid #e9ecef;
+    }
+    .input-group {
+      display: flex;
+      gap: 10px;
+    }
+    .input-group input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #e9ecef;
+      border-radius: 25px;
+      outline: none;
+      font-size: 1rem;
+    }
+    .input-group input:focus { border-color: #667eea; }
+    .input-group button {
+      padding: 12px 20px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.3s;
+    }
+    .input-group button:hover {
+      background: #5a6fd8;
+    }
+    .typing-indicator {
+      display: none;
+      padding: 10px;
+      font-style: italic;
+      color: #666;
+    }
+    @media (max-width: 600px) {
+      .chat-container {
+        height: 100vh;
+        border-radius: 0;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <h1>🤖 ${robotName}</h1>
-            <p>Assistente Inteligente para Vendas</p>
-        </div>
-        
-        <div class="product-info">
-            <div class="product-title">${pageData.title}</div>
-            <div class="product-price">${pageData.price}</div>
-        </div>
-        
-        <div class="chat-messages" id="chatMessages">
-            <div class="message bot">
-                <div class="message-content">
-                    Olá! 👋 Sou o ${robotName}, seu assistente especializado em "${pageData.title}". 
-                    
-                    Como posso te ajudar hoje? Posso responder sobre:
-                    • Preços e formas de pagamento
-                    • Benefícios e características
-                    • Depoimentos de clientes
-                    • Processo de compra
-                    ${customInstructions ? '\n\n' + customInstructions : ''}
-                </div>
-            </div>
-        </div>
-        
-        <div class="typing-indicator" id="typingIndicator">
-            ${robotName} está digitando...
-        </div>
-        
-        <div class="chat-input">
-            <div class="input-group">
-                <input type="text" id="messageInput" placeholder="Digite sua pergunta..." maxlength="500">
-                <button onclick="sendMessage()">Enviar</button>
-            </div>
-        </div>
+  <div class="chat-container">
+    <div class="chat-header">
+      <h1>🤖 ${robotName}</h1>
+      <p>Assistente Inteligente para Vendas</p>
     </div>
+    <div class="product-info">
+      <div class="product-title">${pageData.title}</div>
+      <div class="product-price">${pageData.price}</div>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="message bot">
+        <div class="message-content">
+Olá! 👋 Sou o ${robotName}, seu assistente de vendas para o produto "${pageData.title}".
 
-    <script>
-        const pageData = ${JSON.stringify(pageData)};
-        const robotName = "${robotName}";
-        const conversationId = 'chat_' + Date.now();
-        
-        function addMessage(content, isUser = false) {
-            const messagesContainer = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message ' + (isUser ? 'user' : 'bot');
-            
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-            contentDiv.textContent = content;
-            
-            messageDiv.appendChild(contentDiv);
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-        
-        function showTyping() {
-            document.getElementById('typingIndicator').style.display = 'block';
-        }
-        
-        function hideTyping() {
-            document.getElementById('typingIndicator').style.display = 'none';
-        }
-        
-        async function sendMessage() {
-            const input = document.getElementById('messageInput');
-            const message = input.value.trim();
-            
-            if (!message) return;
-            
-            addMessage(message, true);
-            input.value = '';
-            
-            showTyping();
-            
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        message: message,
-                        pageData: pageData,
-                        robotName: robotName,
-                        conversationId: conversationId
-                    })
-                });
-                
-                const data = await response.json();
-                hideTyping();
-                
-                if (data.success) {
-                    addMessage(data.response);
-                } else {
-                    addMessage('Desculpe, ocorreu um erro. Tente novamente.');
-                }
-            } catch (error) {
-                hideTyping();
-                addMessage('Erro de conexão. Verifique sua internet e tente novamente.');
-            }
-        }
-        
-        document.getElementById('messageInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
-    </script>
+📌 O que você precisa saber de cara:
+• 💰 Valor: ${pageData.price}
+• 🚀 Benefícios:
+${pageData.benefits.slice(0, 3).map(b => `   - ${b}`).join('\n')}
+• 🎁 Bônus:
+${pageData.bonus && pageData.bonus.length > 0 ? pageData.bonus.slice(0, 2).map(b => `   - ${b}`).join('\n') : '   - Suporte especializado\n   - Acesso VIP'}
+
+🔒 Garantia: ${pageData.guarantee || '7 a 30 dias'}
+
+Digite sua dúvida ou pergunte algo como:
+- "Quais formas de pagamento?"
+- "Funciona mesmo?"
+- "Quanto tempo até ver resultado?"
+${customInstructions ? `\n\n📌 Instruções personalizadas:\n${customInstructions}` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="typing-indicator" id="typingIndicator">
+      ${robotName} está digitando...
+    </div>
+    <div class="chat-input">
+      <div class="input-group">
+        <input type="text" id="messageInput" placeholder="Digite sua pergunta..." maxlength="500">
+        <button onclick="sendMessage()">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const pageData = ${JSON.stringify(pageData)};
+const robotName = "${robotName}";
+const conversationId = 'chat_' + Date.now();
+
+function addMessage(content, isUser = false) {
+  const messagesContainer = document.getElementById('chatMessages');
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message ' + (isUser ? 'user' : 'bot');
+  const contentDiv = document.createElement('div');
+  contentDiv.className = 'message-content';
+  contentDiv.textContent = content;
+  messageDiv.appendChild(contentDiv);
+  messagesContainer.appendChild(messageDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function showTyping() {
+  document.getElementById('typingIndicator').style.display = 'block';
+}
+
+function hideTyping() {
+  document.getElementById('typingIndicator').style.display = 'none';
+}
+
+async function sendMessage() {
+  const input = document.getElementById('messageInput');
+  const message = input.value.trim();
+  if (!message) return;
+  addMessage(message, true);
+  input.value = '';
+  showTyping();
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: message,
+        pageData: pageData,
+        robotName: robotName,
+        conversationId: conversationId
+      })
+    });
+    const data = await response.json();
+    hideTyping();
+    if (data.success) {
+      addMessage(data.response);
+    } else {
+      addMessage('Desculpe, ocorreu um erro. Tente novamente.');
+    }
+  } catch (error) {
+    hideTyping();
+    addMessage('Erro de conexão. Verifique sua internet e tente novamente.');
+  }
+}
+
+document.getElementById('messageInput').addEventListener('keypress', function(e) {
+  if (e.key === 'Enter') {
+    sendMessage();
+  }
+});
+</script>
 </body>
-</html>`;
+</html>
+  `;
 }
 
 // Rotas da API (mantidas iguais ao original)
