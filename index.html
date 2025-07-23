@@ -345,7 +345,7 @@
                 extractedDataDiv.innerHTML = `
                     <p><strong>Título:</strong> ${extractedPageData.title}</p>
                     <p><strong>Descrição:</strong> ${extractedPageData.description}</p>
-                    <p><strong>Preço:</strong> ${extractedPageData.price}</p>
+                    <p><strong>Preço:</strong> ${extractedPageData.price.total !== 'Consulte o preço na página' ? extractedPageData.price.total : ''} ${extractedPageData.price.installment !== 'Consulte o preço na página' ? `(${extractedPageData.price.installment})` : ''}</p>
                     <p><strong>Benefícios:</strong> ${extractedPageData.benefits.join(', ')}</p>
                     <p><strong>CTA:</strong> ${extractedPageData.cta}</p>
                 `;

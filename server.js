@@ -174,7 +174,11 @@ async function extractPageData(url) {
         }
 
         // SUPER REFINAMENTO: Extrair preço com busca mais específica e inteligente
-        let price = '';
+        let price = 
+          {
+            total: 'Consulte o preço na página',
+            installment: 'Consulte o preço na página'
+          };
         const priceSelectors = [
           // Seletores específicos para preços
           '.price-value',
@@ -202,35 +206,48 @@ async function extractPageData(url) {
           $(selector).each((i, element) => {
             const text = $(element).text().trim();
             // Regex mais específica para encontrar preços brasileiros
-            const priceMatch = text.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?|USD\s*\d+[.,]?\d*|\$\s*\d+[.,]?\d*|€\s*\d+[.,]?\d*|£\s*\d+[.,]?\d*/);
-            if (priceMatch && !price) {
-              price = priceMatch[0];
-              logger.info(`Preço extraído: ${price}`);
-              return false; // Break do each
+            const priceMatchTotal = text.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?\s*à\s*vista/i);
+            const priceMatchInstallment = text.match(/\d+\s*x\s*de\s*R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?/i);
+            const priceMatchSingle = text.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?/);
+
+            if (priceMatchTotal) {
+              price.total = priceMatchTotal[0];
+              logger.info(`Preço total extraído: ${price.total}`);
+            } else if (priceMatchInstallment) {
+              price.installment = priceMatchInstallment[0];
+              logger.info(`Preço parcelado extraído: ${price.installment}`);
+            } else if (priceMatchSingle && !price.total && !price.installment) {
+              // Se for um preço único e ainda não tivermos total ou parcela, assume como total
+              price.total = priceMatchSingle[0];
+              logger.info(`Preço único extraído: ${price.total}`);
             }
           });
-          if (price) break;
+          if (price.total !== 'Consulte o preço na página' && price.installment !== 'Consulte o preço na página') break;
         }
         
         // Se não encontrou preço específico, procurar no texto geral
-        if (!price) {
+        if (price.total === 'Consulte o preço na página' && price.installment === 'Consulte o preço na página') {
           const bodyText = $('body').text();
-          const priceMatches = bodyText.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?/g);
+          const priceMatches = bodyText.match(/R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?|\d+\s*x\s*de\s*R\$\s*\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?/g);
           if (priceMatches && priceMatches.length > 0) {
-            // Pegar o primeiro preço que pareça ser um valor de produto (não muito baixo)
             for (const match of priceMatches) {
-              const numericValue = parseFloat(match.replace(/R\$\s*/, '').replace(/[.,]/g, ''));
-              if (numericValue > 50) { // Assumir que produtos custam mais que R$ 50
-                price = match;
-                logger.info(`Preço extraído do texto geral: ${price}`);
-                break;
+              if (match.toLowerCase().includes('à vista')) {
+                price.total = match;
+                logger.info(`Preço total extraído do texto geral: ${price.total}`);
+              } else if (match.toLowerCase().includes('x de')) {
+                price.installment = match;
+                logger.info(`Preço parcelado extraído do texto geral: ${price.installment}`);
+              } else if (price.total === 'Consulte o preço na página') {
+                // Se for um preço único e ainda não tivermos total, assume como total
+                price.total = match;
+                logger.info(`Preço único extraído do texto geral: ${price.total}`);
               }
             }
           }
         }
         
         // Se ainda não encontrou preço, procurar por ofertas ou promoções
-        if (!price) {
+        if (price.total === 'Consulte o preço na página' && price.installment === 'Consulte o preço na página') {
           const offerSelectors = [
             '*:contains("oferta"):not(script):not(style)',
             '*:contains("promoção"):not(script):not(style)',
@@ -243,18 +260,25 @@ async function extractPageData(url) {
           for (const selector of offerSelectors) {
             $(selector).each((i, element) => {
               const text = $(element).text().trim();
-              if (text.length > 20 && text.length < 300 && !price &&
+              if (text.length > 20 && text.length < 300 && 
                   (text.includes('R$') || text.includes('apenas') || text.includes('investimento'))) {
-                price = text;
-                logger.info(`Oferta extraída: ${price}`);
-                return false;
+                if (text.toLowerCase().includes('à vista')) {
+                  price.total = text;
+                  logger.info(`Oferta total extraída: ${price.total}`);
+                } else if (text.toLowerCase().includes('x de')) {
+                  price.installment = text;
+                  logger.info(`Oferta parcelada extraída: ${price.installment}`);
+                } else if (price.total === 'Consulte o preço na página') {
+                  price.total = text;
+                  logger.info(`Oferta única extraída: ${price.total}`);
+                }
               }
             });
-            if (price) break;
+            if (price.total !== 'Consulte o preço na página' && price.installment !== 'Consulte o preço na página') break;
           }
         }
         
-        if (price) {
+        if (price.total !== 'Consulte o preço na página' || price.installment !== 'Consulte o preço na página') {
           extractedData.price = price;
         }
 
@@ -467,52 +491,62 @@ async function generateAIResponse(userMessage, pageData, conversationId = 'defau
 
     if (!process.env.OPENROUTER_API_KEY) {
       // SUPER INTELIGÊNCIA: Sistema de respostas contextuais e específicas
-      const message = userMessage.toLowerCase();
-      
-      // Detectar intenção específica da mensagem
+
       let response = '';
+      let priceResponse = `💰 **Sobre o investimento no "${pageData.title}":**\n\n`;
       
-      if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
-        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\nÉ um investimento que se paga rapidamente com os resultados que você vai alcançar! Muitos clientes recuperam o valor em poucos dias.\n\n🎯 ${pageData.cta}`;
+      if (message.includes("preço") || message.includes("valor") || message.includes("custa") || message.includes("investimento")) {
+        if (typeof pageData.price === "object") {
+          if (pageData.price.total && pageData.price.total !== "Consulte o preço na página") {
+            priceResponse += `**Valor à vista:** ${pageData.price.total}\n`;
+          }
+          if (pageData.price.installment && pageData.price.installment !== "Consulte o preço na página") {
+            priceResponse += `**Valor parcelado:** ${pageData.price.installment}\n`;
+          }
+        } else if (pageData.price !== "Consulte o preço na página") {
+          priceResponse += `${pageData.price}\n`;
+        }
         
-      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('o que ganho')) {
-        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n🚀 ${pageData.cta}`;
+        if (priceResponse === `💰 **Sobre o investimento no "${pageData.title}":**\n\n`) {
+          priceResponse += `Consulte o preço na página.\n`;
+        }
+        response = `${priceResponse}\nÉ um investimento que se paga rapidamente com os resultados que você vai alcançar! Muitos clientes recuperam o valor em poucos dias.\n\n🎯 ${pageData.cta}`;
+        
+      } else if (message.includes("benefício") || message.includes("vantagem") || message.includes("o que ganho")) {
+        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join("\n")}\n\n🚀 ${pageData.cta}`;
         
       } else if (message.includes("quero saber mais") || message.includes("me explica") || message.includes("vale a pena") || message.includes("detalhes") || message.includes("fale mais") || message.includes("informações") || message.includes("como funciona")) {
         response = `Com certeza! O "${pageData.title}" é um produto incrível que se destaca por:\n\n${pageData.description}\n\nAlém disso, você terá acesso a benefícios exclusivos como:\n${pageData.benefits.map((benefit, i) => `• ${benefit}`).join("\n")}\n\n${pageData.customInstructions ? `**Instruções adicionais:** ${pageData.customInstructions}\n\n` : ``}Se tiver alguma dúvida mais específica, me diga!`;
         
-      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco')) {
+      } else if (message.includes("garantia") || message.includes("seguro") || message.includes("risco")) {
         response = `🛡️ **Sim! O "${pageData.title}" oferece garantia total.**\n\n${pageData.description}\n\nVocê não tem nada a perder e tudo a ganhar! Se não ficar satisfeito, devolvemos seu dinheiro.\n\n✅ ${pageData.cta}`;
         
-      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo') || message.includes('resultado')) {
+      } else if (message.includes("depoimento") || message.includes("opinião") || message.includes("funciona mesmo") || message.includes("resultado")) {
         if (pageData.testimonials.length > 0) {
-          // Remover duplicatas dos depoimentos
           const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
-          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n🎯 ${pageData.cta}`;
+          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join("\n\n")}\n\n🎯 ${pageData.cta}`;
         } else {
           response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\nOs resultados falam por si só!\n\n🚀 ${pageData.cta}`;
         }
         
-      } else if (message.includes('bônus') || message.includes('extra') || message.includes('brinde')) {
+      } else if (message.includes("bônus") || message.includes("extra") || message.includes("brinde")) {
         response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
         
-      } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero')) {
-        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nClique no botão acima para garantir sua vaga!`;
-        
+      } else if (message.includes("comprar") || message.includes("adquirir") || message.includes("quero")) {
+        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${typeof pageData.price === "object" ? (pageData.price.total !== "Consulte o preço na página" ? `**Valor à vista:** ${pageData.price.total}` : "") + (pageData.price.installment !== "Consulte o preço na página" ? `\n**Valor parcelado:** ${pageData.price.installment}` : "") : pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join("\n")}\n\n🚀 **${pageData.cta}**\n\nClique no botão acima para garantir sua vaga!`;        
       } else if (message.includes("dúvida") || message.includes("pergunta") || message.includes("ajuda") || message.includes("suporte") || message.includes("fale com atendente")) {
         response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n\n${pageData.customInstructions ? `**Instruções adicionais:** ${pageData.customInstructions}\n\n` : ``}O que você gostaria de saber?`;
         
       } else {
-        // Resposta padrão mais inteligente e persuasiva
-        response = `Olá! 👋 Sou o ${pageData.robotName || 'seu assistente'}. Bem-vindo(a) ao "${pageData.title}"!\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias ou depoimentos!`;
-      }
+        response = `Olá! 👋 Sou o ${pageData.robotName || "seu assistente"}. Bem-vindo(a) ao "${pageData.title}"!\n\n${pageData.description}\n\n💰 **Investimento:** ${typeof pageData.price === "object" ? (pageData.price.total !== "Consulte o preço na página" ? `**Valor à vista:** ${pageData.price.total}` : "") + (pageData.price.installment !== "Consulte o preço na página" ? `\n**Valor parcelado:** ${pageData.price.installment}` : "") : pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join("\n")}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias ou depoimentos!`;     }
       
       // Adicionar resposta ao histórico
-      conversation.push({ role: 'assistant', message: response, timestamp: Date.now() });
+      conversation.push({ role: "assistant", message: response, timestamp: Date.now() });
       conversationCache.set(conversationId, conversation);
       
       return response;
     }
+
 
     // Se tiver API key, usar IA externa
     const conversationHistory = conversation.map(c => ({
@@ -575,7 +609,7 @@ Pergunta do cliente: ${userMessage}`;
     logger.error('Erro na geração de resposta IA:', error);
     
     // SUPER FALLBACK: Resposta específica e persuasiva
-    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials.slice(0,2).join(' | ')}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
+    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${typeof pageData.price === 'object' ? (pageData.price.total !== 'Consulte o preço na página' ? `**Valor à vista:** ${pageData.price.total}` : '') + (pageData.price.installment !== 'Consulte o preço na página' ? `\n**Valor parcelado:** ${pageData.price.installment}` : '') : pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials.slice(0,2).join(' | ')}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
 
     return fallbackResponse;
   }
@@ -759,7 +793,7 @@ function generateChatbotHTML(pageData, robotName, customInstructions = '') {
         
         <div class="product-info">
             <div class="product-title">${pageData.title}</div>
-            <div class="product-price">${pageData.price}</div>
+            <div class="product-price">${typeof pageData.price === 'object' ? (pageData.price.total !== 'Consulte o preço na página' ? pageData.price.total : pageData.price.installment) : pageData.price}</div>
         </div>
         
         <div class="chat-messages" id="chatMessages">
@@ -771,7 +805,7 @@ function generateChatbotHTML(pageData, robotName, customInstructions = '') {
                     
                     ${pageData.benefits.slice(0,3).map(b => `• ${b}`).join("\n")}
 
-                    E o melhor: tudo isso por apenas ${pageData.price}!
+                    E o melhor: tudo isso por apenas ${typeof pageData.price === 'object' ? (pageData.price.total !== 'Consulte o preço na página' ? pageData.price.total : pageData.price.installment) : pageData.price}!
 
                     Como posso te ajudar hoje? Posso responder sobre:
                     • Preços e formas de pagamento
