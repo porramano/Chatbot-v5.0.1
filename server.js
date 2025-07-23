@@ -495,28 +495,7 @@ async function generateAIResponse(userMessage, pageData, conversationId = 'defau
       content: c.message
     }));
 
-    const prompt = `Você é um assistente de vendas especializado e altamente persuasivo para o produto "${pageData.title}".
-
-INFORMAÇÕES REAIS DO PRODUTO:
-- Título: ${pageData.title}
-- Descrição: ${pageData.description}
-- Preço: ${pageData.price}
-- Benefícios: ${pageData.benefits.join(", ")}
-- Call to Action: ${pageData.cta}
-
-Com base nas informações do produto, responda à pergunta do cliente de forma natural, útil e proativa, guiando-o para a compra. Se a pergunta for vaga, ofereça informações relevantes sobre o produto. Use emojis para tornar a conversa mais envolvente.
-
-Histórico da conversa:\n${conversationHistory.map(c => `${c.role}: ${c.content}`).join("\n")}\n
-Pergunta do cliente: ${userMessage}`;
-
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: 'microsoft/wizardlm-2-8x22b',
-      messages: [
-        {
-          role: 'system',
-          content: 'Você é um assistente de vendas especializado, amigável e altamente persuasivo. Use apenas informações reais do produto fornecidas.'
-        },
-        ...conversationHistory.slice(-5), // Últimas 5 mensagens para contexto
+    const prompt = `Com base nas informações do produto, responda à seguinte pergunta do usuário de forma direta e concisa.\n\nInformações do Produto:\n- Título: ${pageData.title}\n- Descrição: ${pageData.description}\n- Preço: ${typeof pageData.price === 'object' ? (pageData.price.total !== 'Consulte o preço na página' ? `Valor à vista: ${pageData.price.total}` : '') + (pageData.price.installment !== 'Consulte o preço na página' ? `\nValor parcelado: ${pageData.price.installment}` : '') : pageData.price}\n- Benefícios: ${pageData.benefits.join(', ')}\n- Depoimentos: ${pageData.testimonials.join(' | ')}\n- CTA: ${pageData.cta}\n\nUsuário: ${userMessage}`;slice(-5), // Últimas 5 mensagens para contexto
         {
           role: 'user',
           content: prompt
@@ -729,37 +708,8 @@ function generateChatbotHTML(pageData, robotName) {
             <h1>🤖 ${robotName}</h1>
             <p>Assistente Inteligente para Vendas</p>
         </div>
-        
-        <div class="product-info">
-            <div class="product-title">${pageData.title}</div>
-            <div class="product-price">${typeof pageData.price === 'object' ? (pageData.price.total !== 'Consulte o preço na página' ? pageData.price.total : pageData.price.installment) : pageData.price}</div>
-        </div>
-        
         <div class="chat-messages" id="chatMessages">
-            <div class="message bot">
-                <div class="message-content">
-                    Olá! 👋 Sou o ${robotName}, seu assistente especializado em "${pageData.title}".
-                    
-                    Pronto para transformar seus resultados? Com o "${pageData.title}", você vai descobrir como:
-                    
-                    ${pageData.benefits.slice(0,3).map(b => `• ${b}`).join("\n")}
-
-                    E o melhor: tudo isso por apenas ${typeof pageData.price === 'object' ? (pageData.price.total !== 'Consulte o preço na página' ? pageData.price.total : pageData.price.installment) : pageData.price}!
-
-                    Como posso te ajudar hoje? Posso responder sobre:
-                    • Preços e formas de pagamento
-                    • Benefícios e características
-                    • Depoimentos de clientes
-                    • Processo de compra
-                    
-                </div>
-            </div>
-        </div>
-        
-        <div class="typing-indicator" id="typingIndicator">
-            ${robotName} está digitando...
-        </div>
-        
+        </div>     
         <div class="chat-input">
             <div class="input-group">
                 <input type="text" id="messageInput" placeholder="Digite sua pergunta..." maxlength="500">
@@ -1013,3 +963,5 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 module.exports = app;
+
+
