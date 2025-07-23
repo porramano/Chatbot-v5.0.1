@@ -14,7 +14,7 @@
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -245,7 +245,8 @@
         <p class="subtitle">IA Conversacional Inteligente para Vendas Online</p>
         
         <div class="alert">
-            ✅ VERSÃO OTIMIZADA: Deploy Rápido e Estável!<br>
+            ✅ VERSÃO OTIMIZADA: Deploy Rápido e Estável!  
+
             Extração inteligente com Cheerio + Axios - 100% funcional no Render.com
         </div>
         
@@ -261,7 +262,7 @@
             </div>
             
             <div class="form-group">
-                <label for="customInstructions">💡 Instruções Personalizadas (opcional):</label>
+                <label for="customInstructions">💡 Instruções Personalizadas (opcional ):</label>
                 <textarea id="customInstructions" placeholder="Adicione instruções específicas para o chatbot, como tom de voz, informações extras, etc."></textarea>
             </div>
             
@@ -279,7 +280,8 @@
             </div>
             
             <div class="chatbot-link">
-                <strong>🔗 Link do Chatbot:</strong><br>
+                <strong>🔗 Link do Chatbot:</strong>  
+
                 <a href="#" id="chatbotLink" target="_blank">Clique aqui para acessar</a>
             </div>
             
@@ -290,35 +292,35 @@
         </div>
         
         <div class="social-buttons">
-            <button class="social-btn whatsapp" onclick="shareToSocial('whatsapp')">📱 WhatsApp</button>
-            <button class="social-btn instagram" onclick="shareToSocial('instagram')">📸 Instagram</button>
-            <button class="social-btn facebook" onclick="shareToSocial('facebook')">👥 Facebook</button>
-            <button class="social-btn youtube" onclick="shareToSocial('youtube')">🎥 YouTube</button>
-            <button class="social-btn tiktok" onclick="shareToSocial('tiktok')">🎵 TikTok</button>
-            <button class="social-btn twitter" onclick="shareToSocial('twitter')">🐦 Twitter</button>
-            <button class="social-btn kwai" onclick="shareToSocial('kwai')">🎬 Kwai</button>
-            <button class="social-btn linkedin" onclick="shareToSocial('linkedin')">💼 LinkedIn</button>
-            <button class="social-btn telegram" onclick="shareToSocial('telegram')">✈️ Telegram</button>
-            <button class="social-btn messenger" onclick="shareToSocial('messenger')">💬 Messenger</button>
+            <button class="social-btn whatsapp" onclick="shareToSocial(\'whatsapp\')">📱 WhatsApp</button>
+            <button class="social-btn instagram" onclick="shareToSocial(\'instagram\')">📸 Instagram</button>
+            <button class="social-btn facebook" onclick="shareToSocial(\'facebook\')">👥 Facebook</button>
+            <button class="social-btn youtube" onclick="shareToSocial(\'youtube\')">🎥 YouTube</button>
+            <button class="social-btn tiktok" onclick="shareToSocial(\'tiktok\')">🎵 TikTok</button>
+            <button class="social-btn twitter" onclick="shareToSocial(\'twitter\')">🐦 Twitter</button>
+            <button class="social-btn kwai" onclick="shareToSocial(\'kwai\')">🎬 Kwai</button>
+            <button class="social-btn linkedin" onclick="shareToSocial(\'linkedin\')">💼 LinkedIn</button>
+            <button class="social-btn telegram" onclick="shareToSocial(\'telegram\')">✈️ Telegram</button>
+            <button class="social-btn messenger" onclick="shareToSocial(\'messenger\')">💬 Messenger</button>
             <button class="social-btn prompt" onclick="generatePrompt()">🧠 Prompt</button>
             <button class="social-btn analytics" onclick="showAnalytics()">📊 Analytics</button>
         </div>
     </div>
 
     <script>
-        let currentChatbotUrl = '';
+        let currentChatbotUrl = \'\';
         let extractedPageData = null;
         
-        document.getElementById('chatbotForm').addEventListener('submit', async function(e) {
+        document.getElementById(\'chatbotForm\').addEventListener(\'submit\', async function(e) {
             e.preventDefault();
             
-            const robotName = document.getElementById('robotName').value;
-            const salesUrl = document.getElementById('salesUrl').value;
-            const customInstructions = document.getElementById('customInstructions').value;
+            const robotName = document.getElementById(\'robotName\').value;
+            const salesUrl = document.getElementById(\'salesUrl\').value;
+            const customInstructions = document.getElementById(\'customInstructions\').value;
             
             // Mostrar loading
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('result').style.display = 'none';
+            document.getElementById(\'loading\').style.display = \'block\';
+            document.getElementById(\'result\').style.display = \'none\';
             
             try {
                 // CORREÇÃO: Mudança para /extract (não /api/extract)
@@ -337,142 +339,106 @@
                 currentChatbotUrl = `/chatbot?${chatbotParams.toString()}`;
                 
                 // Mostrar resultado
-                document.getElementById('chatbotLink').href = currentChatbotUrl;
-                document.getElementById('chatbotLink').textContent = window.location.origin + currentChatbotUrl;
+                document.getElementById(\'chatbotLink\').href = currentChatbotUrl;
+                document.getElementById(\'chatbotLink\').textContent = window.location.origin + currentChatbotUrl;
                 
                 // Mostrar dados extraídos
-                const extractedDataDiv = document.getElementById('extractedData');
+                const extractedDataDiv = document.getElementById(\'extractedData\');
                 extractedDataDiv.innerHTML = `
-                    <p><strong>Título:</strong> ${extractedPageData.title}</p>
-                    <p><strong>Descrição:</strong> ${extractedPageData.description}</p>
-                    <p><strong>Preço:</strong> ${extractedPageData.price}</p>
-                    <p><strong>Benefícios:</strong> ${extractedPageData.benefits.join(', ')}</p>
-                    <p><strong>CTA:</strong> ${extractedPageData.cta}</p>
-                `;
+                    <p><strong>Título:</strong> ${extractedPageData.title}</p>\n                    <p><strong>Descrição:</strong> ${extractedPageData.description}</p>\n                    <p><strong>Preço:</strong> ${extractedPageData.price}</p>\n                    <p><strong>Benefícios:</strong> ${extractedPageData.benefits.join(\'\', \')}</p>\n                    <p><strong>CTA:</strong> ${extractedPageData.cta}</p>\n                `;
                 
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('result').style.display = 'block';
+                document.getElementById(\'loading\').style.display = \'none\';
+                document.getElementById(\'result\').style.display = \'block\';
                 
             } catch (error) {
-                alert('Erro ao criar chatbot: ' + error.message);
-                document.getElementById('loading').style.display = 'none';
+                alert(\'Erro ao criar chatbot: \' + error.message);
+                document.getElementById(\'loading\').style.display = \'none\';
             }
         });
         
         function shareToSocial(platform) {
             if (!currentChatbotUrl) {
-                alert('Por favor, crie um chatbot primeiro!');
+                alert(\'Por favor, crie um chatbot primeiro!\');
                 return;
             }
             
             const fullUrl = window.location.origin + currentChatbotUrl;
-            const robotName = document.getElementById('robotName').value || 'Assistente Virtual';
+            const robotName = document.getElementById(\'robotName\').value || \'Assistente Virtual\';
             const message = `🤖 Converse com ${robotName} - Assistente Inteligente com IA! ${fullUrl}`;
             
-            let shareUrl = '';
+            let shareUrl = \'\';
             
             switch(platform) {
-                case 'whatsapp':
-                    shareUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                case \'whatsapp\':
+                    shareUrl = `https://wa.me/?text=${encodeURIComponent(message )}`;
                     break;
-                case 'instagram':
+                case \'instagram\':
                     navigator.clipboard.writeText(message).then(() => {
-                        alert('Link copiado! Cole no Instagram Stories ou Direct.');
-                        window.open('https://www.instagram.com/', '_blank');
+                        alert(\'Link copiado! Cole no Instagram Stories ou Direct.\');
+                        window.open(\'https://www.instagram.com/\', \'_blank\' );
                     });
                     return;
-                case 'facebook':
-                    shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fullUrl)}&quote=${encodeURIComponent(message)}`;
+                case \'facebook\':
+                    shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(fullUrl )}&quote=${encodeURIComponent(message)}`;
                     break;
-                case 'youtube':
+                case \'youtube\':
                     navigator.clipboard.writeText(message).then(() => {
-                        alert('Link copiado! Cole na descrição do seu vídeo no YouTube.');
-                        window.open('https://www.youtube.com/', '_blank');
+                        alert(\'Link copiado! Cole na descrição do seu vídeo no YouTube.\');
+                        window.open(\'https://www.youtube.com/\', \'_blank\' );
                     });
                     return;
-                case 'tiktok':
+                case \'tiktok\':
                     navigator.clipboard.writeText(message).then(() => {
-                        alert('Link copiado! Cole no seu vídeo do TikTok.');
-                        window.open('https://www.tiktok.com/', '_blank');
+                        alert(\'Link copiado! Cole no seu vídeo do TikTok.\');
+                        window.open(\'https://www.tiktok.com/\', \'_blank\' );
                     });
                     return;
-                case 'twitter':
-                    shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message)}`;
+                case \'twitter\':
+                    shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(message )}`;
                     break;
-                case 'kwai':
+                case \'kwai\':
                     navigator.clipboard.writeText(message).then(() => {
-                        alert('Link copiado! Cole no seu vídeo do Kwai.');
-                        window.open('https://www.kwai.com/', '_blank');
+                        alert(\'Link copiado! Cole no seu vídeo do Kwai.\');
+                        window.open(\'https://www.kwai.com/\', \'_blank\' );
                     });
                     return;
-                case 'linkedin':
-                    shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(fullUrl)}`;
+                case \'linkedin\':
+                    shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(fullUrl )}`;
                     break;
-                case 'telegram':
-                    shareUrl = `https://t.me/share/url?url=${encodeURIComponent(fullUrl)}&text=${encodeURIComponent(message)}`;
+                case \'telegram\':
+                    shareUrl = `https://t.me/share/url?url=${encodeURIComponent(fullUrl )}&text=${encodeURIComponent(message)}`;
                     break;
-                case 'messenger':
-                    shareUrl = `https://www.facebook.com/dialog/send?link=${encodeURIComponent(fullUrl)}`;
+                case \'messenger\':
+                    shareUrl = `https://www.facebook.com/dialog/send?link=${encodeURIComponent(fullUrl )}`;
                     break;
             }
             
             if (shareUrl) {
-                window.open(shareUrl, '_blank', 'width=600,height=400');
+                window.open(shareUrl, \'_blank\', \'width=600,height=400\');
             }
         }
         
         function generatePrompt() {
             if (!extractedPageData) {
-                alert('Por favor, crie um chatbot primeiro!');
+                alert(\'Por favor, crie um chatbot primeiro!\');
                 return;
             }
             
-            const robotName = document.getElementById('robotName').value || 'Assistente Virtual';
-            const customInstructions = document.getElementById('customInstructions').value;
+            const robotName = document.getElementById(\'robotName\').value || \'Assistente Virtual\';
+            const customInstructions = document.getElementById(\'customInstructions\').value;
             
-            const prompt = `Você é ${robotName}, um assistente de vendas especializado e altamente persuasivo.
-
-INFORMAÇÕES DO PRODUTO:
-- Título: ${extractedPageData.title}
-- Descrição: ${extractedPageData.description}
-- Preço: ${extractedPageData.price}
-- Benefícios: ${extractedPageData.benefits.join(', ')}
-- Call to Action: ${extractedPageData.cta}
-
-INSTRUÇÕES PERSONALIZADAS:
-${customInstructions || 'Seja sempre prestativo, entusiasmado e focado em converter o visitante em cliente.'}
-
-MISSÃO:
-Sua missão é ajudar visitantes interessados, responder dúvidas sobre o produto, destacar os benefícios de forma persuasiva e conduzir naturalmente para a compra. Use as informações reais do produto para criar respostas personalizadas e convincentes.
-
-ESTILO DE COMUNICAÇÃO:
-- Seja amigável e profissional
-- Use as informações específicas do produto
-- Crie urgência quando apropriado
-- Foque nos benefícios e resultados
-- Conduza para a ação de compra`;
+            const prompt = `Você é ${robotName}, um assistente de vendas especializado e altamente persuasivo.\n\nINFORMAÇÕES DO PRODUTO:\n- Título: ${extractedPageData.title}\n- Descrição: ${extractedPageData.description}\n- Preço: ${extractedPageData.price}\n- Benefícios: ${extractedPageData.benefits.join(\'\', \')}\n- Call to Action: ${extractedPageData.cta}\n\nINSTRUÇÕES PERSONALIZADAS:\n${customInstructions || \'Seja sempre prestativo, entusiasmado e focado em converter o visitante em cliente.\'}\n\nMISSÃO:\nSua missão é ajudar visitantes interessados, responder dúvidas sobre o produto, destacar os benefícios de forma persuasiva e conduzir naturalmente para a compra. Use as informações reais do produto para criar respostas personalizadas e convincentes.\n\nESTILO DE COMUNICAÇÃO:\n- Seja amigável e profissional\n- Use as informações específicas do produto\n- Crie urgência quando apropriado\n- Foque nos benefícios e resultados\n- Conduza para a ação de compra`;
 
             navigator.clipboard.writeText(prompt).then(() => {
-                alert('Prompt copiado para a área de transferência! Cole no ChatGPT ou outra IA.');
+                alert(\'Prompt copiado para a área de transferência! Cole no ChatGPT ou outra IA.\');
             }).catch(() => {
-                const modal = document.createElement('div');
-                modal.style.cssText = `
-                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                    background: rgba(0,0,0,0.8); z-index: 1000; display: flex;
-                    align-items: center; justify-content: center; padding: 20px;
-                `;
+                const modal = document.createElement(\'div\');
+                modal.style.cssText = `\n                    position: fixed; top: 0; left: 0; width: 100%; height: 100%;\n                    background: rgba(0,0,0,0.8); z-index: 1000; display: flex;\n                    align-items: center; justify-content: center; padding: 20px;\n                `;
                 
-                const content = document.createElement('div');
-                content.style.cssText = `
-                    background: white; padding: 20px; border-radius: 10px;
-                    max-width: 600px; max-height: 80%; overflow-y: auto;
-                `;
+                const content = document.createElement(\'div\');
+                content.style.cssText = `\n                    background: white; padding: 20px; border-radius: 10px;\n                    max-width: 600px; max-height: 80%; overflow-y: auto;\n                `;
                 
-                content.innerHTML = `
-                    <h3>Prompt Gerado</h3>
-                    <textarea style="width: 100%; height: 300px; margin: 10px 0;">${prompt}</textarea>
-                    <button onclick="this.parentElement.parentElement.remove()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">Fechar</button>
-                `;
+                content.innerHTML = `\n                    <h3>Prompt Gerado</h3>\n                    <textarea style="width: 100%; height: 300px; margin: 10px 0;">${prompt}</textarea>\n                    <button onclick="this.parentElement.parentElement.remove()" style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 5px; cursor: pointer;">Fechar</button>\n                `;
                 
                 modal.appendChild(content);
                 document.body.appendChild(modal);
@@ -480,9 +446,8 @@ ESTILO DE COMUNICAÇÃO:
         }
         
         function showAnalytics() {
-            alert('Funcionalidade de Analytics em desenvolvimento. Em breve você poderá acompanhar as conversas e métricas do seu chatbot!');
+            alert(\'Funcionalidade de Analytics em desenvolvimento. Em breve você poderá acompanhar as conversas e métricas do seu chatbot!\');
         }
     </script>
 </body>
 </html>
-
