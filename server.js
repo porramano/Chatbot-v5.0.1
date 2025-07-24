@@ -1038,3 +1038,119 @@ app.listen(PORT, '0.0.0.0', () => {
 });
 
 module.exports = app;
+
+// Rota para gerar prompt inteligente
+app.post('/generate-prompt', async (req, res) => {
+  try {
+    const { pageData } = req.body;
+    if (!pageData) return res.status(400).json({ error: 'Dados da página são obrigatórios' });
+
+    const salesPrompt = `Você é um especialista em vendas focado no produto "${pageData.title}". 
+    Descrição: ${pageData.description}
+    Preço: ${pageData.price}
+    Benefícios: ${pageData.benefits.join(', ')}
+
+    Seu papel:
+    1. Responder perguntas sobre o produto de forma completa
+    2. Gerar respostas persuasivas que convertem em vendas
+    3. Usar técnicas de copywriting e gatilhos mentais
+    4. Ao final, direcionar para o link de compra
+
+    Formato de respostas:
+    - Linguagem natural e amigável
+    - Emojis estratégicos para engajamento
+    - Chamadas para ação claras
+    - Respostas curtas (máx. 3 parágrafos)
+
+    Direcione sempre para: ${pageData.url}`;
+
+    res.json({ prompt: salesPrompt });
+
+  } catch (error) {
+    console.error('Erro ao gerar prompt:', error);
+    res.status(500).json({ error: 'Erro ao gerar prompt' });
+  }
+});
+
+// Rota para conversa com IA (estilo GPT)
+app.post('/conversation', async (req, res) => {
+  try {
+    const { sessionId, message, pageData, conversationHistory = [] } = req.body;
+
+    if (!sessionId || !message || !pageData) {
+      return res.status(400).json({ error: 'Parâmetros incompletos' });
+    }
+
+    const context = [
+      {
+        role: "system",
+        content: \`Você é um especialista em vendas do produto "\${pageData.title}". 
+        Use estas informações: \${JSON.stringify(pageData)}. 
+        Seja persuasivo e direcione para: \${pageData.url}\`
+      },
+      ...conversationHistory.slice(-6),
+      { role: "user", content: message }
+    ];
+
+    const response = await axios.post(
+      'https://api-inference.huggingface.co/models/google/gemma-7b-it',
+      { inputs: context.map(m => \`\${m.role}: \${m.content}\`).join('\n') },
+      {
+        headers: {
+          Authorization: \`Bearer \${process.env.HF_API_KEY}\`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const aiResponse = response.data[0]?.generated_text.split('\n').pop().replace('assistant: ', '');
+
+    const newHistory = [
+      ...conversationHistory,
+      { role: "user", content: message },
+      { role: "assistant", content: aiResponse }
+    ];
+
+    conversationCache.set(sessionId, {
+      history: newHistory,
+      timestamp: Date.now()
+    });
+
+    res.json({ 
+      response: aiResponse,
+      conversationHistory: newHistory,
+      socialLinks: generateSocialLinks(pageData)
+    });
+
+  } catch (error) {
+    console.error('Erro na conversa:', error.response?.data || error.message);
+    const fallbackResponse = "Estou com dificuldades agora. Poderia reformular? Enquanto isso, confira nossos links:";
+    res.json({
+      response: fallbackResponse,
+      socialLinks: generateSocialLinks(pageData)
+    });
+  }
+});
+
+// Gerar links sociais dinâmicos
+function generateSocialLinks(pageData) {
+  const encodedTitle = encodeURIComponent(pageData.title);
+  const encodedUrl = encodeURIComponent(pageData.url);
+
+  return {
+    whatsapp: \`https://wa.me/?text=Confira+\${encodedTitle}+\${encodedUrl}\`,
+    telegram: \`https://t.me/share/url?url=\${encodedUrl}&text=\${encodedTitle}\`,
+    facebook: \`https://www.facebook.com/sharer/sharer.php?u=\${encodedUrl}\`,
+    twitter: \`https://twitter.com/intent/tweet?text=\${encodedTitle}&url=\${encodedUrl}\`
+  };
+}
+
+// Rota para criar sessão de chat
+app.post('/create-session', (req, res) => {
+  const sessionId = uuidv4();
+  conversationCache.set(sessionId, {
+    history: [],
+    timestamp: Date.now()
+  });
+  res.json({ sessionId });
+});
