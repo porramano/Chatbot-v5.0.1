@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const winston = require('winston');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
 const app = express();
@@ -149,7 +150,7 @@ async function extractPageData(url) {
           'meta[name="description"]',
           'meta[property="og:description"]',
           'meta[name="twitter:description"]',
-          // Por último, parágrafos gerais (mas filtrados)
+          // Por último, parágrafos gerais (mas filtrados) 
           'p:not(:contains("cookie")):not(:contains("política")):not(:contains("termos")):not(:contains("vendd")):not(:empty)',
           '.text-content p:first',
           'article p:first',
@@ -1026,18 +1027,18 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Iniciar servidor
-app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Servidor rodando na porta ${PORT}`);
-  console.log(`🚀 LinkMágico Chatbot v5.0.1-SUPER-CORRIGIDO rodando na porta ${PORT}`);
-  console.log(`📊 Extração SUPER REFINADA com Cheerio + Axios`);
-  console.log(`🎯 Descrição e Preço muito mais precisos`);
-  console.log(`🤖 IA SUPER INTELIGENTE com respostas contextuais`);
-  console.log(`💬 Sistema de conversação com histórico`);
-  console.log(`🔗 Acesse: http://localhost:${PORT}`);
-});
-
-module.exports = app;
+// CORREÇÃO: Função para gerar links sociais dinâmicos
+function generateSocialLinks(pageData) {
+  const encodedTitle = encodeURIComponent(pageData.title);
+  const encodedUrl = encodeURIComponent(pageData.url);
+  
+  return {
+    whatsapp: `https://wa.me/?text=Confira+${encodedTitle}+${encodedUrl}`,
+    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${encodedTitle}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+    twitter: `https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`
+  };
+}
 
 // Rota para gerar prompt inteligente
 app.post('/generate-prompt', async (req, res) => {
@@ -1049,19 +1050,19 @@ app.post('/generate-prompt', async (req, res) => {
     Descrição: ${pageData.description}
     Preço: ${pageData.price}
     Benefícios: ${pageData.benefits.join(', ')}
-
+    
     Seu papel:
     1. Responder perguntas sobre o produto de forma completa
     2. Gerar respostas persuasivas que convertem em vendas
     3. Usar técnicas de copywriting e gatilhos mentais
     4. Ao final, direcionar para o link de compra
-
+    
     Formato de respostas:
     - Linguagem natural e amigável
     - Emojis estratégicos para engajamento
     - Chamadas para ação claras
     - Respostas curtas (máx. 3 parágrafos)
-
+    
     Direcione sempre para: ${pageData.url}`;
 
     res.json({ prompt: salesPrompt });
@@ -1072,45 +1073,66 @@ app.post('/generate-prompt', async (req, res) => {
   }
 });
 
-// Rota para conversa com IA (estilo GPT)
+// Rota para conversa com IA (estilo GPT) - VERSÃO CORRIGIDA
 app.post('/conversation', async (req, res) => {
   try {
     const { sessionId, message, pageData, conversationHistory = [] } = req.body;
-
+    
     if (!sessionId || !message || !pageData) {
       return res.status(400).json({ error: 'Parâmetros incompletos' });
     }
 
+    // CORREÇÃO: Template string sem barra invertida
     const context = [
       {
         role: "system",
-        content: \`Você é um especialista em vendas do produto "\${pageData.title}". 
-        Use estas informações: \${JSON.stringify(pageData)}. 
-        Seja persuasivo e direcione para: \${pageData.url}\`
+        content: `Você é um especialista em vendas do produto "${pageData.title}". 
+        Use estas informações: ${JSON.stringify({
+          title: pageData.title,
+          description: pageData.description,
+          price: pageData.price,
+          benefits: pageData.benefits.slice(0, 3)
+        })}. 
+        Seja persuasivo e direcione para: ${pageData.url}`
       },
-      ...conversationHistory.slice(-6),
+      ...conversationHistory.slice(-6), // Manter as últimas 6 mensagens como contexto
       { role: "user", content: message }
     ];
 
+    // Integração com IA gratuita (Hugging Face)
     const response = await axios.post(
       'https://api-inference.huggingface.co/models/google/gemma-7b-it',
-      { inputs: context.map(m => \`\${m.role}: \${m.content}\`).join('\n') },
+      { 
+        inputs: context.map(m => `${m.role}: ${m.content}`).join('\n'),
+        parameters: {
+          max_new_tokens: 500,
+          temperature: 0.7
+        }
+      },
       {
         headers: {
-          Authorization: \`Bearer \${process.env.HF_API_KEY}\`,
+          Authorization: `Bearer ${process.env.HF_API_KEY}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // Aumentado para 30s
       }
     );
 
-    const aiResponse = response.data[0]?.generated_text.split('\n').pop().replace('assistant: ', '');
+    let aiResponse = response.data[0]?.generated_text || '';
+    
+    // Processar resposta para remover prefixos
+    const lastAssistantIndex = aiResponse.lastIndexOf('assistant:');
+    if (lastAssistantIndex !== -1) {
+      aiResponse = aiResponse.substring(lastAssistantIndex + 'assistant:'.length).trim();
+    }
 
+    // Atualizar cache de conversa
     const newHistory = [
       ...conversationHistory,
       { role: "user", content: message },
       { role: "assistant", content: aiResponse }
     ];
-
+    
     conversationCache.set(sessionId, {
       history: newHistory,
       timestamp: Date.now()
@@ -1123,27 +1145,16 @@ app.post('/conversation', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erro na conversa:', error.response?.data || error.message);
-    const fallbackResponse = "Estou com dificuldades agora. Poderia reformular? Enquanto isso, confira nossos links:";
+    logger.error('Erro na conversa:', error.response?.data || error.message);
+    
+    // Fallback para resposta simples
+    const fallbackResponse = "Estou processando sua pergunta... Enquanto isso, confira nossos links:";
     res.json({
       response: fallbackResponse,
       socialLinks: generateSocialLinks(pageData)
     });
   }
 });
-
-// Gerar links sociais dinâmicos
-function generateSocialLinks(pageData) {
-  const encodedTitle = encodeURIComponent(pageData.title);
-  const encodedUrl = encodeURIComponent(pageData.url);
-
-  return {
-    whatsapp: \`https://wa.me/?text=Confira+\${encodedTitle}+\${encodedUrl}\`,
-    telegram: \`https://t.me/share/url?url=\${encodedUrl}&text=\${encodedTitle}\`,
-    facebook: \`https://www.facebook.com/sharer/sharer.php?u=\${encodedUrl}\`,
-    twitter: \`https://twitter.com/intent/tweet?text=\${encodedTitle}&url=\${encodedUrl}\`
-  };
-}
 
 // Rota para criar sessão de chat
 app.post('/create-session', (req, res) => {
@@ -1154,3 +1165,25 @@ app.post('/create-session', (req, res) => {
   });
   res.json({ sessionId });
 });
+
+// Rota de status para health check
+app.get('/status', (req, res) => {
+  res.status(200).json({ 
+    status: 'online', 
+    version: '5.0.1-GPT-CORRIGIDO',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Iniciar servidor
+app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Servidor rodando na porta ${PORT}`);
+  console.log(`🚀 LinkMágico Chatbot v5.0.1-SUPER-CORRIGIDO rodando na porta ${PORT}`);
+  console.log(`📊 Extração SUPER REFINADA com Cheerio + Axios`);
+  console.log(`🎯 Descrição e Preço muito mais precisos`);
+  console.log(`🤖 IA SUPER INTELIGENTE com respostas contextuais`);
+  console.log(`💬 Sistema de conversação com histórico`);
+  console.log(`🔗 Acesse: http://localhost:${PORT}`);
+});
+
+module.exports = app;
