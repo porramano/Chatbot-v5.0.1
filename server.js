@@ -474,31 +474,30 @@ async function generateAIResponse(userMessage, pageData, conversationId = 'defau
       let response = '';
       
       if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
-        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\nÉ um investimento que se paga rapidamente com os resultados que você vai alcançar! Muitos clientes recuperam o valor em poucos dias.\n\n🎯 ${pageData.cta}`;
+        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\n✅ **O que está incluso:**\n${pageData.benefits.slice(0,4).map(b => `• ${b}`).join('\n')}\n\n🎁 **Bônus especiais inclusos!**\n\n🚀 **${pageData.cta}**\n\nTem mais alguma dúvida sobre o investimento?`;
         
-      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('o que ganho')) {
-        response = `✅ **Os principais benefícios do "${pageData.title}" são:**\n\n${pageData.benefits.map((benefit, i) => `${i+1}. ${benefit}`).join('\n')}\n\n🚀 ${pageData.cta}`;
-        
-      } else if (message.includes('como funciona') || message.includes('funciona') || message.includes('método')) {
-        response = `🔥 **Como o "${pageData.title}" funciona:**\n\n${pageData.description}\n\n**Principais resultados que você vai alcançar:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n💪 ${pageData.cta}`;
-        
-      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco')) {
-        response = `🛡️ **Sim! O "${pageData.title}" oferece garantia total.**\n\n${pageData.description}\n\nVocê não tem nada a perder e tudo a ganhar! Se não ficar satisfeito, devolvemos seu dinheiro.\n\n✅ ${pageData.cta}`;
-        
-      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo') || message.includes('resultado')) {
-        if (pageData.testimonials.length > 0) {
-          // Remover duplicatas dos depoimentos
-          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
-          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n🎯 ${pageData.cta}`;
-        } else {
-          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\nOs resultados falam por si só!\n\n🚀 ${pageData.cta}`;
-        }
-        
-      } else if (message.includes('bônus') || message.includes('extra') || message.includes('brinde')) {
-        response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 ${pageData.cta}`;
+      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('resultado') || message.includes('funciona')) {
+        response = `✅ **Benefícios comprovados do "${pageData.title}":**\n\n${pageData.benefits.map(b => `🎯 ${b}`).join('\n')}\n\n💬 **Depoimentos reais:**\n${pageData.testimonials.slice(0,2).map(t => `"${t}"`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nQuer saber mais alguma coisa?`;
         
       } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero')) {
         response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nClique no botão acima para garantir sua vaga!`;
+        
+      } else if (message.includes('pós') && message.includes('venda') || message.includes('atendimento') || message.includes('suporte') || message.includes('produtor')) {
+        response = `🤝 **Sobre o pós-venda e atendimento:**\n\nSim! Oferecemos suporte completo após a compra do "${pageData.title}":\n\n✅ **Atendimento direto com o produtor**\n✅ **Suporte técnico especializado**\n✅ **Garantia de satisfação**\n✅ **Acompanhamento dos seus resultados**\n\n💰 **Investimento:** ${pageData.price}\n\n🚀 **${pageData.cta}**\n\nTem mais alguma dúvida sobre o suporte?`;
+        
+      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco')) {
+        response = `🛡️ **Sim! O "${pageData.title}" oferece garantia total.**\n\n${pageData.description}\n\nVocê não tem nada a perder e tudo a ganhar! Se não ficar satisfeito, devolvemos seu dinheiro.\n\n✅ **${pageData.cta}**`;
+        
+      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo')) {
+        if (pageData.testimonials.length > 0) {
+          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
+          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n🎯 **${pageData.cta}**`;
+        } else {
+          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\nOs resultados falam por si só!\n\n🚀 **${pageData.cta}**`;
+        }
+        
+      } else if (message.includes('bônus') || message.includes('extra') || message.includes('brinde')) {
+        response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 **${pageData.cta}**`;
         
       } else if (message.includes('dúvida') || message.includes('pergunta') || message.includes('ajuda')) {
         response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n\nO que você gostaria de saber?`;
