@@ -449,138 +449,195 @@ async function extractPageData(url) {
   }
 }
 
+// Função SUPER INTELIGENTE para detectar intenção do usuário
+function detectUserIntent(message) {
+  const msg = message.toLowerCase();
+  
+  // Saudações
+  if (msg.match(/^(oi|olá|ola|hey|hi|hello|bom dia|boa tarde|boa noite)$/)) {
+    return 'greeting';
+  }
+  
+  // Perguntas sobre preço
+  if (msg.includes('preço') || msg.includes('preco') || msg.includes('valor') || msg.includes('custa') || msg.includes('investimento')) {
+    return 'price_inquiry';
+  }
+  
+  // Perguntas sobre benefícios
+  if (msg.includes('benefício') || msg.includes('beneficio') || msg.includes('vantagem') || msg.includes('funciona') || msg.includes('serve')) {
+    return 'benefits_inquiry';
+  }
+  
+  // Interesse em comprar
+  if (msg.includes('comprar') || msg.includes('quero') || msg.includes('adquirir') || msg.includes('interessado')) {
+    return 'purchase_intent';
+  }
+  
+  // Dúvidas sobre suporte/pós-venda
+  if (msg.includes('suporte') || msg.includes('pós') || msg.includes('pos') || msg.includes('atendimento') || msg.includes('ajuda')) {
+    return 'support_inquiry';
+  }
+  
+  // Perguntas sobre garantia
+  if (msg.includes('garantia') || msg.includes('devolução') || msg.includes('devolucao') || msg.includes('reembolso')) {
+    return 'guarantee_inquiry';
+  }
+  
+  return 'general_inquiry';
+}
+
+// Função para gerar respostas contextuais baseadas na intenção
+function generateContextualResponse(intent, pageData, robotName, userMessage, conversationHistory) {
+  const hasGreeted = conversationHistory.some(h => h.sender === robotName && h.message.includes('👋'));
+  
+  switch (intent) {
+    case 'greeting':
+      if (hasGreeted) {
+        return `Oi novamente! 😊 Em que mais posso te ajudar sobre o ${pageData.title}?`;
+      }
+      return `Olá! 👋 Sou o ${robotName}, seu assistente especializado em "${pageData.title}". Como posso te ajudar hoje?`;
+      
+    case 'price_inquiry':
+      return `💰 O investimento para o ${pageData.title} é: ${pageData.price}\n\nConsiderando todos os benefícios que você vai receber, é um excelente custo-benefício! Quer saber mais sobre o que está incluso?`;
+      
+    case 'benefits_inquiry':
+      const benefits = pageData.benefits.slice(0, 3);
+      return `✅ Os principais benefícios do ${pageData.title} são:\n\n${benefits.map(b => `• ${b}`).join('\n')}\n\nEstes são apenas alguns dos resultados que você pode esperar! Qual desses benefícios mais te interessa?`;
+      
+    case 'purchase_intent':
+      return `🚀 Que ótimo! Você está pronto para transformar seus resultados com o ${pageData.title}!\n\n${pageData.cta}\n\nClique no link acima para garantir sua vaga agora mesmo! Alguma dúvida antes de finalizar?`;
+      
+    case 'support_inquiry':
+      return `🤝 Sim, temos um excelente suporte! Você terá acesso completo ao atendimento especializado para tirar todas suas dúvidas e garantir que você tenha os melhores resultados com o ${pageData.title}.\n\nQuer saber mais alguma coisa sobre o produto?`;
+      
+    case 'guarantee_inquiry':
+      return `🛡️ Pode ficar tranquilo! O ${pageData.title} oferece garantia para sua total segurança. Você pode experimentar sem riscos!\n\nQuer que eu te explique mais sobre como funciona?`;
+      
+    default:
+      return `Entendi sua pergunta sobre "${userMessage}". O ${pageData.title} foi desenvolvido exatamente para resolver questões como essa!\n\n${pageData.description.substring(0, 150)}...\n\nQuer que eu detalhe melhor como isso pode te ajudar?`;
+  }
+}
+
 // Função SUPER INTELIGENTE para gerar resposta da IA
-async function generateAIResponse(userMessage, pageData, conversationId = 'default') {
+async function generateAIResponse(userMessage, pageData, conversationId = 'default', robotName = 'Assistente', customInstructions = '') {
   try {
     // Recuperar histórico da conversa
     let conversation = conversationCache.get(conversationId) || [];
     
+    // Detectar intenção do usuário
+    const intent = detectUserIntent(userMessage);
+    logger.info(`🎯 Intenção detectada: ${intent} para mensagem: "${userMessage}"`);
+    
     // Adicionar mensagem do usuário ao histórico
-    conversation.push({ role: 'user', message: userMessage, timestamp: Date.now() });
+    conversation.push({ 
+      sender: 'user', 
+      message: userMessage, 
+      timestamp: Date.now(),
+      intent: intent
+    });
     
     // Manter apenas as últimas 10 mensagens para não sobrecarregar
     if (conversation.length > 10) {
       conversation = conversation.slice(-10);
     }
     
-    // Salvar histórico atualizado
-    conversationCache.set(conversationId, conversation);
+    // Usar IA externa (OpenRouter) se disponível
+    const openrouterKey = process.env.OPENROUTER_API_KEY;
+    if (openrouterKey) {
+      try {
+        logger.info('🚀 Usando IA externa (OpenRouter) para resposta inteligente');
+        
+        // Construir histórico da conversa para contexto
+        const recentHistory = conversation.slice(-6).map(h => 
+          `${h.sender === 'user' ? 'Cliente' : robotName}: ${h.message}`
+        ).join('\n');
+        
+        const systemPrompt = `Você é ${robotName}, um assistente de vendas especializado e inteligente para o produto "${pageData.title}".
 
-    if (!process.env.OPENROUTER_API_KEY) {
-      // SUPER INTELIGÊNCIA: Sistema de respostas contextuais e específicas
-      const message = userMessage.toLowerCase();
-      
-      // Detectar intenção específica da mensagem
-      let response = '';
-      
-      if (message.includes('preço') || message.includes('valor') || message.includes('custa') || message.includes('investimento')) {
-        response = `💰 **Sobre o investimento no "${pageData.title}":**\n\n${pageData.price}\n\n✅ **O que está incluso:**\n${pageData.benefits.slice(0,4).map(b => `• ${b}`).join('\n')}\n\n🎁 **Bônus especiais inclusos!**\n\n🚀 **${pageData.cta}**\n\nTem mais alguma dúvida sobre o investimento?`;
-        
-      } else if (message.includes('benefício') || message.includes('vantagem') || message.includes('resultado') || message.includes('funciona')) {
-        response = `✅ **Benefícios comprovados do "${pageData.title}":**\n\n${pageData.benefits.map(b => `🎯 ${b}`).join('\n')}\n\n💬 **Depoimentos reais:**\n${pageData.testimonials.slice(0,2).map(t => `"${t}"`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nQuer saber mais alguma coisa?`;
-        
-      } else if (message.includes('comprar') || message.includes('adquirir') || message.includes('quero')) {
-        response = `🎉 **Excelente escolha!**\n\nO "${pageData.title}" é exatamente o que você precisa para transformar seus resultados!\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Você vai receber:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🚀 **${pageData.cta}**\n\nClique no botão acima para garantir sua vaga!`;
-        
-      } else if (message.includes('pós') && message.includes('venda') || message.includes('atendimento') || message.includes('suporte') || message.includes('produtor')) {
-        response = `🤝 **Sobre o pós-venda e atendimento:**\n\nSim! Oferecemos suporte completo após a compra do "${pageData.title}":\n\n✅ **Atendimento direto com o produtor**\n✅ **Suporte técnico especializado**\n✅ **Garantia de satisfação**\n✅ **Acompanhamento dos seus resultados**\n\n💰 **Investimento:** ${pageData.price}\n\n🚀 **${pageData.cta}**\n\nTem mais alguma dúvida sobre o suporte?`;
-        
-      } else if (message.includes('garantia') || message.includes('seguro') || message.includes('risco')) {
-        response = `🛡️ **Sim! O "${pageData.title}" oferece garantia total.**\n\n${pageData.description}\n\nVocê não tem nada a perder e tudo a ganhar! Se não ficar satisfeito, devolvemos seu dinheiro.\n\n✅ **${pageData.cta}**`;
-        
-      } else if (message.includes('depoimento') || message.includes('opinião') || message.includes('funciona mesmo')) {
-        if (pageData.testimonials.length > 0) {
-          const uniqueTestimonials = [...new Set(pageData.testimonials)].slice(0, 3);
-          response = `💬 **Veja o que nossos clientes dizem sobre "${pageData.title}":**\n\n${uniqueTestimonials.map((t, i) => `${i+1}. "${t}"`).join('\n\n')}\n\n🎯 **${pageData.cta}**`;
-        } else {
-          response = `💬 **O "${pageData.title}" já transformou a vida de milhares de pessoas!**\n\n${pageData.description}\n\nOs resultados falam por si só!\n\n🚀 **${pageData.cta}**`;
-        }
-        
-      } else if (message.includes('bônus') || message.includes('extra') || message.includes('brinde')) {
-        response = `🎁 **Sim! Temos bônus exclusivos para quem adquire o "${pageData.title}" hoje:**\n\n• Suporte especializado\n• Atualizações gratuitas\n• Acesso à comunidade VIP\n• Material complementar\n\n⏰ Oferta por tempo limitado!\n\n🔥 **${pageData.cta}**`;
-        
-      } else if (message.includes('dúvida') || message.includes('pergunta') || message.includes('ajuda')) {
-        response = `🤝 **Estou aqui para te ajudar!**\n\nPosso esclarecer qualquer dúvida sobre o "${pageData.title}":\n\n• 💰 Preços e formas de pagamento\n• ✅ Benefícios e características\n• 💬 Depoimentos de clientes\n• 🛡️ Garantias e segurança\n• 🎁 Bônus exclusivos\n• 🚀 Processo de compra\n\nO que você gostaria de saber?`;
-        
-      } else {
-        // Resposta padrão mais inteligente e persuasiva
-        response = `Olá! 👋 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.slice(0,3).map(b => `• ${b}`).join('\n')}\n\n🎯 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso falar sobre preços, benefícios, garantias ou depoimentos!`;
-      }
-      
-      // Adicionar resposta ao histórico
-      conversation.push({ role: 'assistant', message: response, timestamp: Date.now() });
-      conversationCache.set(conversationId, conversation);
-      
-      return response;
-    }
-
-    // Se tiver API key, usar IA externa
-    const conversationHistory = conversation.map(c => ({
-      role: c.role === 'user' ? 'user' : 'assistant',
-      content: c.message
-    }));
-
-    const prompt = `Você é um assistente de vendas especializado e altamente persuasivo para o produto "${pageData.title}".
-
-INFORMAÇÕES REAIS DO PRODUTO:
+INFORMAÇÕES DO PRODUTO:
 - Título: ${pageData.title}
 - Descrição: ${pageData.description}
 - Preço: ${pageData.price}
-- Benefícios: ${pageData.benefits.join(', ')}
-- Call to Action: ${pageData.cta}
+- Benefícios principais: ${pageData.benefits.slice(0, 3).join(', ')}
+- Call-to-Action: ${pageData.cta}
 
-INSTRUÇÕES:
-- Use APENAS as informações reais do produto fornecidas
-- Seja específico, persuasivo e focado em vendas
-- Responda de forma amigável e profissional
-- Conduza naturalmente para a compra
-- Use emojis para tornar a conversa mais envolvente
+INSTRUÇÕES PERSONALIZADAS: ${customInstructions || 'Seja sempre entusiasmado e focado em vendas'}
 
-Pergunta do cliente: ${userMessage}`;
+REGRAS IMPORTANTES:
+1. Seja conversacional, natural e inteligente como um humano
+2. Use as informações do produto de forma contextual e relevante
+3. Adapte sua resposta à intenção específica do usuário: ${intent}
+4. Seja persuasivo mas não repetitivo - varie suas respostas
+5. Mantenha o foco em vendas e conversão
+6. Use emojis moderadamente (máximo 2 por resposta)
+7. Seja específico sobre o produto quando perguntado
+8. NUNCA repita informações já mencionadas na conversa recente
+9. Seja criativo e varie suas respostas baseado no contexto
+10. Responda de forma direta e objetiva à pergunta do usuário
+11. Se for uma saudação simples, responda de forma amigável e pergunte como pode ajudar
+12. Se for uma pergunta específica, responda diretamente sem repetir tudo
 
-    const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
-      model: 'microsoft/wizardlm-2-8x22b',
-      messages: [
-        {
-          role: 'system',
-          content: 'Você é um assistente de vendas especializado, amigável e altamente persuasivo. Use apenas informações reais do produto fornecidas.'
-        },
-        ...conversationHistory.slice(-5), // Últimas 5 mensagens para contexto
-        {
-          role: 'user',
-          content: prompt
+HISTÓRICO DA CONVERSA RECENTE:
+${recentHistory || 'Início da conversa'}
+
+Responda de forma inteligente, contextual e específica à mensagem do usuário. Não repita informações desnecessárias.`;
+
+        const response = await axios.post('https://openrouter.ai/api/v1/chat/completions', {
+          model: 'meta-llama/llama-3.1-8b-instruct:free',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          max_tokens: 200,
+          temperature: 0.8,
+          top_p: 0.9
+        }, {
+          headers: {
+            'Authorization': `Bearer ${openrouterKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'http://localhost:3000',
+            'X-Title': 'LinkMágico Chatbot'
+          },
+          timeout: 10000
+        });
+
+        if (response.data && response.data.choices && response.data.choices[0]) {
+          const aiResponse = response.data.choices[0].message.content.trim();
+          logger.info('✅ Resposta da IA externa gerada com sucesso');
+          
+          // Adicionar resposta da IA ao histórico
+          conversation.push({ 
+            sender: robotName, 
+            message: aiResponse, 
+            timestamp: Date.now() 
+          });
+          conversationCache.set(conversationId, conversation);
+          
+          return aiResponse;
         }
-      ],
-      max_tokens: 500,
-      temperature: 0.7
-    }, {
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://linkmagico-chatbot.com',
-        'X-Title': 'LinkMagico Chatbot'
+      } catch (aiError) {
+        logger.error('❌ Erro na IA externa:', aiError.message);
+        // Continuar para fallback
       }
-    });
-
-    if (response.status === 200) {
-      const aiResponse = response.data.choices[0].message.content;
-      
-      // Adicionar resposta da IA ao histórico
-      conversation.push({ role: 'assistant', message: aiResponse, timestamp: Date.now() });
-      conversationCache.set(conversationId, conversation);
-      
-      return aiResponse;
-    } else {
-      throw new Error('Erro na API do OpenRouter');
     }
+    
+    // Fallback: Respostas inteligentes baseadas em intenção
+    logger.info('📝 Usando fallback inteligente baseado em intenção');
+    const contextualResponse = generateContextualResponse(intent, pageData, robotName, userMessage, conversation);
+    
+    // Adicionar resposta ao histórico
+    conversation.push({ 
+      sender: robotName, 
+      message: contextualResponse, 
+      timestamp: Date.now() 
+    });
+    conversationCache.set(conversationId, conversation);
+    
+    return contextualResponse;
 
   } catch (error) {
     logger.error('Erro na geração de resposta IA:', error);
-    
-    // SUPER FALLBACK: Resposta específica e persuasiva
-    const fallbackResponse = `Olá! 🔥 **Sobre o "${pageData.title}":**\n\n${pageData.description}\n\n💰 **Investimento:** ${pageData.price}\n\n✅ **Principais benefícios:**\n${pageData.benefits.map(benefit => `• ${benefit}`).join('\n')}\n\n💬 **Depoimentos:** ${pageData.testimonials.slice(0,2).join(' | ')}\n\n🚀 **${pageData.cta}**\n\n**Como posso te ajudar mais?** Posso esclarecer sobre preços, benefícios, garantias ou processo de compra!`;
-
-    return fallbackResponse;
+    return `Olá! Sou o ${robotName}, seu assistente especializado. Como posso te ajudar hoje?`;
   }
 }
 
@@ -795,6 +852,7 @@ function generateChatbotHTML(pageData, robotName, customInstructions = '') {
     <script>
         const pageData = ${JSON.stringify(pageData)};
         const robotName = "${robotName}";
+        const customInstructions = "${customInstructions}";
         const conversationId = 'chat_' + Date.now();
         
         function addMessage(content, isUser = false) {
@@ -840,7 +898,8 @@ function generateChatbotHTML(pageData, robotName, customInstructions = '') {
                         message: message,
                         pageData: pageData,
                         robotName: robotName,
-                        conversationId: conversationId
+                        conversationId: conversationId,
+                        customInstructions: customInstructions
                     })
                 });
                 
@@ -950,7 +1009,7 @@ app.get('/chatbot', async (req, res) => {
 // Rota para chat da IA (melhorada)
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, pageData, robotName, conversationId } = req.body;
+    const { message, pageData, robotName = 'Assistente', conversationId = 'default', customInstructions = '' } = req.body;
     
     if (!message || !pageData) {
       return res.status(400).json({ 
@@ -961,7 +1020,7 @@ app.post('/api/chat', async (req, res) => {
 
     logger.info(`Chat: ${robotName} - ${message}`);
     
-    const response = await generateAIResponse(message, pageData, conversationId);
+    const response = await generateAIResponse(message, pageData, conversationId, robotName, customInstructions);
     
     res.json({ 
       success: true, 
